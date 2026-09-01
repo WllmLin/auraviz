@@ -20,7 +20,12 @@ enum ColorTheme: String, CaseIterable, Identifiable {
     case ocean = "Ocean"
     case y2k = "Y2K Chrome"
     case mono = "Mono"
+    case stockholm = "Stockholm"
+    case tokyoNight = "Tokyo Night"
+    case chrome = "Chrome"
+
     var id: String { rawValue }
+
     var gradient: [Color] {
         switch self {
         case .aurora: return [Color(red: 0.62, green: 0.35, blue: 1.0), Color(red: 1.0, green: 0.35, blue: 0.65), Color(red: 0.20, green: 0.85, blue: 1.0)]
@@ -28,8 +33,30 @@ enum ColorTheme: String, CaseIterable, Identifiable {
         case .ocean: return [Color(red: 0.15, green: 0.70, blue: 0.90), Color(red: 0.20, green: 0.40, blue: 0.95), Color(red: 0.12, green: 0.18, blue: 0.55)]
         case .y2k: return [Color(red: 0.80, green: 0.95, blue: 1.0), Color(red: 0.45, green: 0.85, blue: 1.0), Color(red: 1.0, green: 0.45, blue: 0.95), Color(red: 1.0, green: 0.85, blue: 0.35)]
         case .mono: return [Color.white, Color(white: 0.75), Color(white: 0.5)]
+        case .stockholm:
+            return [
+                Color(red: 0.84, green: 0.91, blue: 0.91),
+                Color(red: 0.43, green: 0.63, blue: 0.68),
+                Color(red: 0.91, green: 0.72, blue: 0.55),
+                Color(red: 0.74, green: 0.45, blue: 0.40)
+            ]
+        case .tokyoNight:
+            return [
+                Color(red: 0.48, green: 0.64, blue: 0.97),
+                Color(red: 0.73, green: 0.60, blue: 0.97),
+                Color(red: 0.97, green: 0.46, blue: 0.56),
+                Color(red: 0.49, green: 0.81, blue: 1.0)
+            ]
+        case .chrome:
+            return [
+                Color.black,
+                Color(white: 0.48),
+                Color.white,
+                Color(white: 0.70)
+            ]
         }
     }
+
     var barGradient: LinearGradient {
         switch self {
         case .y2k:
@@ -42,6 +69,39 @@ enum ColorTheme: String, CaseIterable, Identifiable {
             return LinearGradient(colors: [Color(red:0.5, green:0.95, blue:1), Color(red:0.2, green:0.5, blue:1)], startPoint: .top, endPoint: .bottom)
         case .mono:
             return LinearGradient(colors: [Color.white, Color(white:0.6)], startPoint: .top, endPoint: .bottom)
+        case .stockholm:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.94, green: 0.93, blue: 0.87),
+                    Color(red: 0.43, green: 0.63, blue: 0.68),
+                    Color(red: 0.74, green: 0.45, blue: 0.40)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case .tokyoNight:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.49, green: 0.81, blue: 1.0),
+                    Color(red: 0.48, green: 0.64, blue: 0.97),
+                    Color(red: 0.73, green: 0.60, blue: 0.97),
+                    Color(red: 1.0, green: 0.42, blue: 0.75)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        case .chrome:
+            return LinearGradient(
+                stops: [
+                    .init(color: .white, location: 0),
+                    .init(color: Color(white: 0.42), location: 0.28),
+                    .init(color: .black, location: 0.52),
+                    .init(color: Color(white: 0.72), location: 0.76),
+                    .init(color: .white, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
     }
 }

@@ -292,6 +292,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_CFBundleDisplayName = AuraViz;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "AuraViz uses microphone input when Microphone mode is selected.";
 				INFOPLIST_KEY_NSSupportsAutomaticGraphicsSwitching = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -321,6 +322,7 @@
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_CFBundleDisplayName = AuraViz;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "AuraViz uses microphone input when Microphone mode is selected.";
 				INFOPLIST_KEY_NSSupportsAutomaticGraphicsSwitching = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

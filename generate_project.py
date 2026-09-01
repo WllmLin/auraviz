@@ -356,6 +356,7 @@ pbx += f"""\t\t{config_debug_proj} /* Debug */ = {{
 \t\t\t\tINFOPLIST_KEY_NSHumanReadableCopyright = "";
 \t\t\t\tINFOPLIST_KEY_CFBundleDisplayName = AuraViz;
 \t\t\t\tINFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+\t\t\t\tINFOPLIST_KEY_NSMicrophoneUsageDescription = "AuraViz uses microphone input when Microphone mode is selected.";
 \t\t\t\tINFOPLIST_KEY_NSSupportsAutomaticGraphicsSwitching = YES;
 \t\t\t\tLD_RUNPATH_SEARCH_PATHS = (
 \t\t\t\t\t"$(inherited)",
@@ -385,6 +386,7 @@ pbx += f"""\t\t{config_debug_proj} /* Debug */ = {{
 \t\t\t\tINFOPLIST_KEY_NSHumanReadableCopyright = "";
 \t\t\t\tINFOPLIST_KEY_CFBundleDisplayName = AuraViz;
 \t\t\t\tINFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+\t\t\t\tINFOPLIST_KEY_NSMicrophoneUsageDescription = "AuraViz uses microphone input when Microphone mode is selected.";
 \t\t\t\tINFOPLIST_KEY_NSSupportsAutomaticGraphicsSwitching = YES;
 \t\t\t\tLD_RUNPATH_SEARCH_PATHS = (
 \t\t\t\t\t"$(inherited)",
@@ -437,4 +439,3 @@ print(f"Wrote {out_path}")
 # also dump ids for debug
 for k,v in ids.items():
     print(k, v)
-

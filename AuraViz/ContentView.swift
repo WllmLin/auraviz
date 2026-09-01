@@ -120,8 +120,14 @@ struct ContentView: View {
                     VStack {
                         HStack {
                             HStack(spacing: 6) {
-                                Circle().fill(audio.isRunning ? Color.green : Color.red).frame(width: 7, height: 7).shadow(color: audio.isRunning ? .green : .red, radius: 6)
-                                Text(audio.isRunning ? "LIVE" : "PAUSED").font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1).foregroundStyle(.white.opacity(0.85))
+                                Circle()
+                                    .fill(audio.isRunning ? Color.green : (audio.isStarting ? Color.orange : Color.red))
+                                    .frame(width: 7, height: 7)
+                                    .shadow(color: audio.isRunning ? .green : (audio.isStarting ? .orange : .red), radius: 6)
+                                Text(audio.isStarting ? "CONNECTING" : (audio.isRunning ? "LIVE" : "PAUSED"))
+                                    .font(.system(size: 10, weight: .black, design: .monospaced))
+                                    .tracking(1)
+                                    .foregroundStyle(.white.opacity(0.85))
                                 Text("•  \(audio.inputMode.rawValue.uppercased())").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
                             }
                             .padding(.horizontal, 10).padding(.vertical, 6)
@@ -130,7 +136,12 @@ struct ContentView: View {
 
                             Spacer()
                             HStack(spacing: 10) {
-                                Label(String(format: "%.0f Hz", audio.synthFrequency), systemImage: "waveform")
+                                Label(
+                                    audio.dominantFrequency > 0
+                                        ? String(format: "%.0f Hz", audio.dominantFrequency)
+                                        : "-- Hz",
+                                    systemImage: "waveform"
+                                )
                                 Label(String(format: "%.0f%%", audio.volume*100), systemImage: "speaker.wave.2")
                             }
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -151,10 +162,10 @@ struct ContentView: View {
                             Button(action: { audio.toggleRunning() }) {
                                 ZStack {
                                     Circle().fill(.ultraThinMaterial).frame(width: 44, height: 44).overlay(Circle().stroke(.white.opacity(0.18), lineWidth: 1))
-                                    Image(systemName: audio.isRunning ? "pause.fill" : "play.fill")
+                                    Image(systemName: (audio.isRunning || audio.isStarting) ? "pause.fill" : "play.fill")
                                         .foregroundStyle(.white)
                                         .font(.system(size: 16, weight: .bold))
-                                        .offset(x: audio.isRunning ? 0 : 1)
+                                        .offset(x: (audio.isRunning || audio.isStarting) ? 0 : 1)
                                 }
                                 .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 6)
                             }
@@ -176,7 +187,7 @@ struct ContentView: View {
                             }
                         }
                         .pickerStyle(.segmented)
-                        .frame(width: 220)
+                        .frame(width: 260)
 
                         if audio.inputMode == .microphone {
                             if !audio.micPermissionGranted {
@@ -185,34 +196,43 @@ struct ContentView: View {
                                     .controlSize(.small)
                                     .tint(.pink)
                             } else {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "mic.fill").foregroundStyle(.pink)
-                                    Text("Mic Active").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
-                                    // level meter
-                                    GeometryReader { g in
-                                        ZStack(alignment: .leading) {
-                                            Capsule().fill(.white.opacity(0.12)).frame(height: 6)
-                                            Capsule().fill(LinearGradient(colors: selectedTheme.gradient, startPoint: .leading, endPoint: .trailing))
-                                                .frame(width: g.size.width * audio.volume, height: 6)
-                                        }
-                                    }
-                                    .frame(width: 90, height: 6)
-                                }
-                                .padding(.horizontal, 10).padding(.vertical, 6)
-                                .background(.white.opacity(0.08), in: Capsule())
+                                inputStatusBadge(
+                                    icon: "mic.fill",
+                                    title: audio.isRunning ? "Microphone Active" : "Microphone Ready",
+                                    color: .pink
+                                )
                             }
-                            Spacer()
-                            Button(audio.isRunning ? "Stop" : "Start") { audio.toggleRunning() }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
                         } else {
-                            // Synth badge
-                            HStack(spacing: 6) {
-                                Image(systemName: "slider.horizontal.3").foregroundStyle(.cyan)
-                                Text("Synth Engine").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.8))
+                            if !audio.systemAudioPermissionGranted && !audio.isStarting {
+                                Button("Enable System Audio") { audio.requestSystemAudioPermission() }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.small)
+                                    .tint(.cyan)
+                            } else {
+                                inputStatusBadge(
+                                    icon: "speaker.wave.3.fill",
+                                    title: audio.isStarting ? "Connecting…" : (audio.isRunning ? "System Audio Active" : "System Audio Ready"),
+                                    color: .cyan
+                                )
                             }
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(.white.opacity(0.08), in: Capsule())
+                        }
+
+                        Spacer()
+                        levelMeter
+                        Button((audio.isRunning || audio.isStarting) ? "Stop" : "Start") {
+                            audio.toggleRunning()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+
+                    if let captureError = audio.captureError {
+                        HStack(spacing: 7) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                            Text(captureError)
+                                .font(.system(size: 10, weight: .medium, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.72))
                             Spacer()
                         }
                     }
@@ -220,42 +240,6 @@ struct ContentView: View {
                     Divider().overlay(.white.opacity(0.08))
 
                     Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                        GridRow {
-                            // Volume
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack {
-                                    Label("Volume", systemImage: "speaker.wave.2.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                                    Spacer()
-                                    Text(String(format: "%.0f%%", audio.synthVolume*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                                }
-                                Slider(value: $audio.synthVolume, in: 0...1)
-                                    .tint(selectedTheme.gradient.first ?? .purple)
-                                    .disabled(audio.inputMode == .microphone)
-                                    .opacity(audio.inputMode == .microphone ? 0.45 : 1)
-                            }
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack {
-                                    Label("Frequency", systemImage: "waveform.path").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                                    Spacer()
-                                    Text(String(format: "%.0f Hz", audio.synthFrequency)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                                }
-                                Slider(value: $audio.synthFrequency, in: 20...800, onEditingChanged: { _ in })
-                                    .tint(.cyan)
-                                    .disabled(audio.inputMode == .microphone)
-                                    .opacity(audio.inputMode == .microphone ? 0.45 : 1)
-                            }
-                            VStack(alignment: .leading, spacing: 5) {
-                                HStack {
-                                    Label("Complexity", systemImage: "wand.and.stars").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                                    Spacer()
-                                    Text(String(format: "%.0f%%", audio.synthComplexity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                                }
-                                Slider(value: $audio.synthComplexity, in: 0...1)
-                                    .tint(.pink)
-                                    .disabled(audio.inputMode == .microphone)
-                                    .opacity(audio.inputMode == .microphone ? 0.45 : 1)
-                            }
-                        }
                         GridRow {
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
@@ -277,18 +261,14 @@ struct ContentView: View {
                             }
                             HStack(spacing: 8) {
                                 Button {
-                                    audio.synthVolume = 0.6
-                                    audio.synthFrequency = 180
-                                    audio.synthComplexity = 0.5
-                                    audio.sensitivity = 1.0
-                                    audio.smoothing = 0.75
+                                    audio.resetVisualizationControls()
                                 } label: {
                                     Label("Reset", systemImage: "arrow.counterclockwise").font(.system(size: 11, weight: .bold, design: .rounded))
                                 }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                                 Spacer()
-                                Text("TIP: Try Y2K + Frequency 320Hz")
+                                Text("PLAY AUDIO IN ANY APP")
                                     .font(.system(size: 10, weight: .medium, design: .rounded))
                                     .foregroundStyle(.white.opacity(0.45))
                                     .lineLimit(1)
@@ -305,6 +285,34 @@ struct ContentView: View {
         .frame(minWidth: 980, minHeight: 700)
         .onAppear {
             if !audio.isRunning { audio.start() }
+        }
+    }
+
+    private func inputStatusBadge(icon: String, title: String, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).foregroundStyle(color)
+            Text(title)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.white.opacity(0.08), in: Capsule())
+    }
+
+    private var levelMeter: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "speaker.wave.2.fill")
+                .foregroundStyle(.white.opacity(0.55))
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.12)).frame(height: 6)
+                    Capsule()
+                        .fill(LinearGradient(colors: selectedTheme.gradient, startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geometry.size.width * audio.volume, height: 6)
+                }
+            }
+            .frame(width: 90, height: 6)
         }
     }
 }

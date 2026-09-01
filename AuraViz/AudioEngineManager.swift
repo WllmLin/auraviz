@@ -2,58 +2,70 @@ import Foundation
 import AVFoundation
 import Accelerate
 import Combine
+import CoreGraphics
+import CoreMedia
+import ScreenCaptureKit
 
 enum InputMode: String, CaseIterable, Identifiable {
+    case systemAudio = "System Audio"
     case microphone = "Microphone"
-    case synth = "Synth"
+
     var id: String { rawValue }
 }
 
-final class AudioEngineManager: ObservableObject {
+final class AudioEngineManager: NSObject, ObservableObject {
     @Published var spectrum: [CGFloat] = Array(repeating: 0.05, count: 64)
     @Published var waveform: [CGFloat] = Array(repeating: 0, count: 256)
     @Published var volume: CGFloat = 0
-    @Published var isRunning: Bool = false
-    @Published var inputMode: InputMode = .synth {
-        didSet { switchInput() }
+    @Published var dominantFrequency: Double = 0
+    @Published var isRunning = false
+    @Published var isStarting = false
+    @Published var captureError: String?
+    @Published var inputMode: InputMode = .systemAudio {
+        didSet {
+            guard inputMode != oldValue else { return }
+            switchInput()
+        }
     }
-    // Synth controls (exposed to UI)
-    @Published var synthVolume: Double = 0.6 // 0..1
-    @Published var synthFrequency: Double = 180 // Hz 20..800
-    @Published var synthComplexity: Double = 0.5 // 0..1 adds harmonics
-    @Published var sensitivity: Double = 1.0 // 0.2..2.0
-    @Published var smoothing: Double = 0.75 // 0..0.95
 
-    @Published var micPermissionGranted: Bool = false
+    @Published var sensitivity: Double = 1.0 // 0.3...2.2
+    @Published var smoothing: Double = 0.75 // 0...0.92
+    @Published var micPermissionGranted = false
+    @Published var systemAudioPermissionGranted = false
 
-    private var engine: AVAudioEngine?
-    private var displayLink: Timer?
-    private var synthPhase: Double = 0
-    private var cancellables = Set<AnyCancellable>()
+    private var microphoneEngine: AVAudioEngine?
+    private var systemAudioStream: SCStream?
+    private var systemAudioStartTask: Task<Void, Never>?
+    private var captureRequestID = UUID()
+    private let audioProcessingQueue = DispatchQueue(
+        label: "com.auraviz.system-audio",
+        qos: .userInteractive
+    )
+    private var systemSampleAccumulator: [Float] = []
 
-    // FFT
-    private let fftSize = 1024
-    private let log2n: vDSP_Length = 10 // 2^10 = 1024
-    private var fftSetup: vDSP.FFT<DSPSplitComplex>?
+    private let fftSize = 4096
+    private let log2n: vDSP_Length = 12 // 2^12 = 4096
+    private var fftSetup: FFTSetup?
     private var window: [Float] = []
-
-    // For decaying peaks (used by Y2K) - exposed for visuals via spectrum
-    // internal smoothing buffers
     private var smoothedSpectrum: [Float] = Array(repeating: 0, count: 64)
 
-    init() {
+    override init() {
+        super.init()
         setupFFT()
         updateWindow()
-        checkMicPermission()
-        startSynth()
-        // re-update window when fftSize changes? static
+        checkPermissions()
+    }
+
+    deinit {
+        systemAudioStartTask?.cancel()
+        microphoneEngine?.stop()
+        if let fftSetup {
+            vDSP_destroy_fftsetup(fftSetup)
+        }
     }
 
     private func setupFFT() {
-        if let setup = vDSP.FFT<DSPSplitComplex>(log2n: log2n, radix: .radix2, ofType: DSPSplitComplex.self) {
-            fftSetup = setup
-        }
-        smoothedSpectrum = Array(repeating: 0, count: 64)
+        fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2))
     }
 
     private func updateWindow() {
@@ -62,286 +74,475 @@ final class AudioEngineManager: ObservableObject {
     }
 
     // MARK: - Public API
+
     func toggleRunning() {
-        if isRunning { stop() } else { start() }
+        if isRunning || isStarting {
+            stop()
+        } else {
+            start()
+        }
     }
 
     func start() {
+        captureError = nil
         switch inputMode {
-        case .synth:
-            startSynth()
+        case .systemAudio:
+            startSystemAudio()
         case .microphone:
             startMicrophone()
         }
-        isRunning = true
     }
 
     func stop() {
+        captureRequestID = UUID()
+        systemAudioStartTask?.cancel()
+        systemAudioStartTask = nil
+
+        if let stream = systemAudioStream {
+            systemAudioStream = nil
+            Task {
+                try? await stream.stopCapture()
+            }
+        }
+
         stopMicrophone()
-        stopSynthTimer()
         isRunning = false
+        isStarting = false
     }
 
-    func switchInput() {
-        stopMicrophone()
-        stopSynthTimer()
-        if isRunning {
+    func resetVisualizationControls() {
+        sensitivity = 1.0
+        smoothing = 0.75
+    }
+
+    func requestSystemAudioPermission() {
+        captureError = nil
+        let granted = CGRequestScreenCaptureAccess()
+        systemAudioPermissionGranted = granted || CGPreflightScreenCaptureAccess()
+
+        if systemAudioPermissionGranted {
             start()
         } else {
-            // if not running but switching to synth, start synth preview
-            if inputMode == .synth { startSynth() }
+            captureError = "Allow AuraViz in System Settings → Privacy & Security → Screen & System Audio Recording, then try again."
         }
-    }
-
-    func checkMicPermission() {
-#if os(macOS)
-        // AVCapture for macOS permission
-        switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .authorized:
-            micPermissionGranted = true
-        default:
-            micPermissionGranted = false
-        }
-#else
-        micPermissionGranted = true
-#endif
     }
 
     func requestMicPermission() {
-#if os(macOS)
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
-                self?.micPermissionGranted = granted
-                if granted && self?.inputMode == .microphone {
-                    self?.startMicrophone()
+                guard let self else { return }
+                self.micPermissionGranted = granted
+                if granted, self.inputMode == .microphone {
+                    self.startMicrophone()
+                } else if !granted {
+                    self.captureError = "Microphone access is required for microphone mode."
                 }
             }
         }
-#endif
     }
 
-    // MARK: - Synth
-    private func startSynth() {
-        stopSynthTimer()
-        // 60 fps synth
-        displayLink = Timer.scheduledTimer(withTimeInterval: 1.0/60.0, repeats: true) { [weak self] _ in
-            self?.tickSynth()
+    private func switchInput() {
+        let shouldRestart = isRunning || isStarting
+        stop()
+        captureError = nil
+        if shouldRestart {
+            start()
         }
-        RunLoop.main.add(displayLink!, forMode: .common)
-        isRunning = true
     }
 
-    private func stopSynthTimer() {
-        displayLink?.invalidate()
-        displayLink = nil
+    private func checkPermissions() {
+        systemAudioPermissionGranted = CGPreflightScreenCaptureAccess()
+        micPermissionGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
 
-    private func tickSynth() {
-        // time delta approximate 1/60
-        let dt = 1.0/60.0
-        // phase increment: 2pi * freq * dt , but we map freq to visual speed
-        let baseFreq = synthFrequency // 20..800
-        synthPhase += 2 * .pi * (baseFreq / 220.0) * dt * 6.0 // scaled for visual
-        if synthPhase > 1000 * .pi { synthPhase.formTruncatingRemainder(dividingBy: 2 * .pi) }
+    // MARK: - System audio
 
-        // generate waveform (256 points) as sum of sines
-        var wave: [CGFloat] = []
-        wave.reserveCapacity(256)
-        for i in 0..<256 {
-            let t = Double(i) / 256.0 * 2 * .pi * 3.0 + synthPhase
-            var v = sin(t) * synthVolume
-            // add harmonics based on complexity
-            if synthComplexity > 0.1 {
-                v += sin(t*2.0 + synthPhase*0.7) * synthVolume * synthComplexity * 0.6
-                v += sin(t*3.0 + synthPhase*1.3) * synthVolume * synthComplexity * 0.3
-                v += sin(t*0.5) * synthVolume * 0.15
+    private func startSystemAudio() {
+        stopMicrophone()
+
+        if !CGPreflightScreenCaptureAccess() {
+            let granted = CGRequestScreenCaptureAccess()
+            systemAudioPermissionGranted = granted || CGPreflightScreenCaptureAccess()
+            guard systemAudioPermissionGranted else {
+                isRunning = false
+                isStarting = false
+                captureError = "Allow AuraViz to record system audio, then press Start again."
+                return
             }
-            // add slight noise
-            v += (Double.random(in: -0.02...0.02) * synthVolume * 0.1)
-            wave.append(CGFloat(v))
+        } else {
+            systemAudioPermissionGranted = true
         }
 
-        // generate spectrum: 64 bands with shape centered around frequency
-        // Map synthFrequency (20..800) to band peak position 0..64
-        // Use log mapping: 20 Hz -> band 0, 800 Hz -> band 55
-        let logMin = log(20.0)
-        let logMax = log(800.0)
-        let logF = log(max(20, baseFreq))
-        let normalized = (logF - logMin) / (logMax - logMin) // 0..1
-        let peakBand = normalized * 52 + 4 // keep edges
-        var newSpec = [Float](repeating: 0, count: 64)
-        for i in 0..<64 {
-            let dist = abs(Double(i) - peakBand)
-            let width = 8.0 - synthComplexity * 5.0
-            let exponent = -(dist * dist) / (2 * width * width)
-            let bell = exp(exponent)
-            var mag: Float = Float(bell) * Float(synthVolume)
-            let bassExp = exp(-Double(i) * 0.18)
-            let bass: Float = Float(bassExp) * Float(synthVolume) * 0.25
-            mag += bass
-            if synthComplexity > 0.5 {
-                let hsBase = Float(synthComplexity) * 0.18
-                let rnd = Float.random(in: 0.7...1.0)
-                let hs = hsBase * rnd
-                let shimmerExp = exp(-abs(Double(i) - peakBand * 1.8) / 12.0)
-                mag += hs * Float(shimmerExp)
+        let requestID = UUID()
+        captureRequestID = requestID
+        isStarting = true
+        isRunning = false
+        audioProcessingQueue.sync {
+            systemSampleAccumulator.removeAll(keepingCapacity: true)
+        }
+
+        systemAudioStartTask?.cancel()
+        systemAudioStartTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let content = try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: true
+                )
+                guard !Task.isCancelled, self.captureRequestID == requestID else { return }
+                guard let display = content.displays.first else {
+                    throw AudioCaptureError.noDisplay
+                }
+
+                let ownBundleID = Bundle.main.bundleIdentifier
+                let excludedApplications = content.applications.filter {
+                    $0.bundleIdentifier == ownBundleID
+                }
+                let filter = SCContentFilter(
+                    display: display,
+                    excludingApplications: excludedApplications,
+                    exceptingWindows: []
+                )
+
+                let configuration = SCStreamConfiguration()
+                configuration.width = 2
+                configuration.height = 2
+                configuration.minimumFrameInterval = CMTime(value: 1, timescale: 2)
+                configuration.queueDepth = 3
+                configuration.showsCursor = false
+                configuration.capturesAudio = true
+                configuration.sampleRate = 48_000
+                configuration.channelCount = 2
+                configuration.excludesCurrentProcessAudio = true
+
+                let stream = SCStream(
+                    filter: filter,
+                    configuration: configuration,
+                    delegate: self
+                )
+                try stream.addStreamOutput(
+                    self,
+                    type: .audio,
+                    sampleHandlerQueue: self.audioProcessingQueue
+                )
+
+                guard !Task.isCancelled, self.captureRequestID == requestID else { return }
+                await MainActor.run {
+                    self.systemAudioStream = stream
+                }
+                try await stream.startCapture()
+
+                guard !Task.isCancelled, self.captureRequestID == requestID else {
+                    try? await stream.stopCapture()
+                    return
+                }
+                await MainActor.run {
+                    self.systemAudioPermissionGranted = true
+                    self.captureError = nil
+                    self.isStarting = false
+                    self.isRunning = true
+                }
+            } catch {
+                guard !Task.isCancelled, self.captureRequestID == requestID else { return }
+                await MainActor.run {
+                    self.systemAudioStream = nil
+                    self.isStarting = false
+                    self.isRunning = false
+                    self.captureError = "System audio capture could not start: \(error.localizedDescription)"
+                }
             }
-            mag *= Float.random(in: 0.85...1.08)
-            mag = min(1, max(0, mag))
-            newSpec[i] = mag
+        }
+    }
+
+    private func processSystemAudioBuffer(_ sampleBuffer: CMSampleBuffer) {
+        guard sampleBuffer.isValid,
+              let formatDescription = CMSampleBufferGetFormatDescription(sampleBuffer),
+              let formatPointer = CMAudioFormatDescriptionGetStreamBasicDescription(formatDescription)
+        else { return }
+
+        let format = formatPointer.pointee
+        guard format.mFormatID == kAudioFormatLinearPCM else { return }
+
+        let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard frameCount > 0 else { return }
+
+        var channelSums = [Float](repeating: 0, count: frameCount)
+        var channelCounts = [Int](repeating: 0, count: frameCount)
+        let isFloat = (format.mFormatFlags & kAudioFormatFlagIsFloat) != 0
+        let isSignedInteger = (format.mFormatFlags & kAudioFormatFlagIsSignedInteger) != 0
+
+        do {
+            try sampleBuffer.withAudioBufferList(
+                flags: [.audioBufferListAssure16ByteAlignment]
+            ) { bufferList, _ in
+                for audioBuffer in bufferList {
+                    guard let data = audioBuffer.mData else { continue }
+                    let channels = max(1, Int(audioBuffer.mNumberChannels))
+
+                    if isFloat, format.mBitsPerChannel == 32 {
+                        let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Float>.size
+                        let samples = data.assumingMemoryBound(to: Float.self)
+                        let availableFrames = min(frameCount, sampleCount / channels)
+                        for frame in 0..<availableFrames {
+                            for channel in 0..<channels {
+                                channelSums[frame] += samples[frame * channels + channel]
+                                channelCounts[frame] += 1
+                            }
+                        }
+                    } else if isFloat, format.mBitsPerChannel == 64 {
+                        let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Double>.size
+                        let samples = data.assumingMemoryBound(to: Double.self)
+                        let availableFrames = min(frameCount, sampleCount / channels)
+                        for frame in 0..<availableFrames {
+                            for channel in 0..<channels {
+                                channelSums[frame] += Float(samples[frame * channels + channel])
+                                channelCounts[frame] += 1
+                            }
+                        }
+                    } else if isSignedInteger, format.mBitsPerChannel == 16 {
+                        let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int16>.size
+                        let samples = data.assumingMemoryBound(to: Int16.self)
+                        let availableFrames = min(frameCount, sampleCount / channels)
+                        for frame in 0..<availableFrames {
+                            for channel in 0..<channels {
+                                channelSums[frame] += Float(samples[frame * channels + channel]) / 32_768
+                                channelCounts[frame] += 1
+                            }
+                        }
+                    } else if isSignedInteger, format.mBitsPerChannel == 32 {
+                        let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int32>.size
+                        let samples = data.assumingMemoryBound(to: Int32.self)
+                        let availableFrames = min(frameCount, sampleCount / channels)
+                        for frame in 0..<availableFrames {
+                            for channel in 0..<channels {
+                                channelSums[frame] += Float(samples[frame * channels + channel]) / Float(Int32.max)
+                                channelCounts[frame] += 1
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            return
         }
 
-        // Apply sensitivity and smoothing
-        let smoothFactor = Float(smoothing)
-        for i in 0..<64 {
-            let target = newSpec[i] * Float(sensitivity)
-            let cur = smoothedSpectrum[i]
-            // exponential smoothing
-            let smoothed = cur * smoothFactor + target * (1 - smoothFactor)
-            smoothedSpectrum[i] = min(1, smoothed)
+        let monoSamples = channelSums.enumerated().map { index, sum in
+            let count = channelCounts[index]
+            return count > 0 ? sum / Float(count) : 0
         }
 
-        let vol = CGFloat(synthVolume) * (0.85 + 0.15 * CGFloat(sin(synthPhase * 0.5)))
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            self.spectrum = self.smoothedSpectrum.map { CGFloat($0) }
-            self.waveform = wave
-            self.volume = vol
+        systemSampleAccumulator.append(contentsOf: monoSamples)
+        let hopSize = fftSize / 4
+        while systemSampleAccumulator.count >= fftSize {
+            processSamples(
+                Array(systemSampleAccumulator.prefix(fftSize)),
+                sampleRate: format.mSampleRate
+            )
+            systemSampleAccumulator.removeFirst(hopSize)
         }
     }
 
     // MARK: - Microphone
+
     private func startMicrophone() {
-        stopSynthTimer()
-        checkMicPermission()
         guard micPermissionGranted else {
-            // fallback to synth tick but show 0
-            startSynth()
+            isRunning = false
+            isStarting = false
+            captureError = "Enable microphone access to use this input."
             return
         }
-        let eng = AVAudioEngine()
-        engine = eng
-        let input = eng.inputNode
+
+        let engine = AVAudioEngine()
+        microphoneEngine = engine
+        let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
-        // Ensure we have a format
         guard format.sampleRate > 0 else {
-            startSynth()
+            captureError = "No microphone input is available."
+            microphoneEngine = nil
             return
         }
-        // Set up tap
-        // Remove existing tap
+
         input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: UInt32(fftSize), format: format) { [weak self] buffer, time in
-            self?.processMicBuffer(buffer)
+        input.installTap(onBus: 0, bufferSize: UInt32(fftSize), format: format) { [weak self] buffer, _ in
+            guard let self, let channelData = buffer.floatChannelData?[0] else { return }
+            let frameCount = Int(buffer.frameLength)
+            guard frameCount > 0 else { return }
+            let samples = Array(UnsafeBufferPointer(start: channelData, count: frameCount))
+            let sampleRate = buffer.format.sampleRate
+            self.audioProcessingQueue.async { [weak self] in
+                self?.processSamples(samples, sampleRate: sampleRate)
+            }
         }
+
         do {
-            try eng.start()
+            try engine.start()
+            isStarting = false
             isRunning = true
+            captureError = nil
         } catch {
-            print("AudioEngine start failed: \(error)")
-            // fallback
-            startSynth()
+            microphoneEngine = nil
+            isRunning = false
+            captureError = "Microphone capture could not start: \(error.localizedDescription)"
         }
     }
 
     private func stopMicrophone() {
-        engine?.inputNode.removeTap(onBus: 0)
-        engine?.stop()
-        engine = nil
+        microphoneEngine?.inputNode.removeTap(onBus: 0)
+        microphoneEngine?.stop()
+        microphoneEngine = nil
     }
 
-    private func processMicBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard let channelData = buffer.floatChannelData?[0] else { return }
-        let frameCount = Int(buffer.frameLength)
-        if frameCount == 0 { return }
+    // MARK: - Signal analysis
 
-        // Prepare signal windowed
-        let n = fftSize
-        var signal = [Float](repeating: 0, count: n)
-        let copyCount = min(frameCount, n)
-        for i in 0..<copyCount {
-            signal[i] = channelData[i] * window[i]
-        }
-        // compute RMS volume
+    private func processSamples(_ samples: [Float], sampleRate: Double) {
+        let frameCount = samples.count
+        guard frameCount > 0, sampleRate > 0 else { return }
+
         var rms: Float = 0
-        vDSP_rmsqv(signal, 1, &rms, vDSP_Length(n))
-        let vol = CGFloat(min(1, rms * 8 * Float(sensitivity))) // scale
+        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(frameCount))
+        let adjustedRMS = max(rms * Float(sensitivity), 0.000_001)
+        let rmsDB = 20 * log10(adjustedRMS)
+        let linearLevel = min(1, max(0, (rmsDB + 60) / 48))
+        let visualVolume = CGFloat(pow(linearLevel, 0.72))
 
-        // FFT processing
-        // Use vDSP.FFT for real signal: pack as split complex via interleaving
-        // Steps: create arrays for real/imag of size n/2
-        let halfN = n / 2
+        var mean: Float = 0
+        vDSP_meanv(samples, 1, &mean, vDSP_Length(frameCount))
+        var signal = [Float](repeating: 0, count: fftSize)
+        let copyCount = min(frameCount, fftSize)
+        for index in 0..<copyCount {
+            signal[index] = (samples[index] - mean) * window[index]
+        }
+
+        let halfN = fftSize / 2
         var real = [Float](repeating: 0, count: halfN)
-        var imag = [Float](repeating: 0, count: halfN)
-        for i in 0..<halfN {
-            real[i] = signal[2*i]
-            imag[i] = signal[2*i+1]
+        var imaginary = [Float](repeating: 0, count: halfN)
+        for index in 0..<halfN {
+            real[index] = signal[2 * index]
+            imaginary[index] = signal[2 * index + 1]
         }
-        var outputReal = [Float](repeating: 0, count: halfN)
-        var outputImag = [Float](repeating: 0, count: halfN)
-        var mags = [Float](repeating: 0, count: halfN)
+        var magnitudes = [Float](repeating: 0, count: halfN)
 
-        guard let fft = fftSetup else { return }
-        // Use safe buffer pointers to avoid temporary-pointer diagnostics
-        real.withUnsafeMutableBufferPointer { realPtr in
-            imag.withUnsafeMutableBufferPointer { imagPtr in
-                outputReal.withUnsafeMutableBufferPointer { outRealPtr in
-                    outputImag.withUnsafeMutableBufferPointer { outImagPtr in
-                        var split = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
-                        var outSplit = DSPSplitComplex(realp: outRealPtr.baseAddress!, imagp: outImagPtr.baseAddress!)
-                        fft.forward(input: split, output: &outSplit)
-                        vDSP_zvabs(&outSplit, 1, &mags, 1, vDSP_Length(halfN))
-                    }
-                }
+        guard let fftSetup else { return }
+        real.withUnsafeMutableBufferPointer { realPointer in
+            imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
+                var split = DSPSplitComplex(
+                    realp: realPointer.baseAddress!,
+                    imagp: imaginaryPointer.baseAddress!
+                )
+                vDSP_fft_zrip(fftSetup, &split, 1, log2n, FFTDirection(FFT_FORWARD))
+                var scale = Float(2.0 / Float(fftSize))
+                vDSP_vsmul(split.realp, 1, &scale, split.realp, 1, vDSP_Length(halfN))
+                vDSP_vsmul(split.imagp, 1, &scale, split.imagp, 1, vDSP_Length(halfN))
+                vDSP_zvabs(&split, 1, &magnitudes, 1, vDSP_Length(halfN))
             }
         }
-        // Normalize mags (divide by n)
-        var scale = Float(1.0 / Float(n))
-        vDSP_vsmul(mags, 1, &scale, &mags, 1, vDSP_Length(halfN))
-        // Apply log scale? For visualization we map to 64 bands with log spacing
-        // Create 64 bands from 512 freq bins (halfN =512) with logarithmic grouping
+        magnitudes[0] = 0
+
+        let binWidth = sampleRate / Double(fftSize)
+        let minFrequency = max(35.0, binWidth)
+        let maxFrequency = min(16_000.0, sampleRate * 0.5 - binWidth)
+        guard maxFrequency > minFrequency else { return }
+        let logMinFrequency = log(minFrequency)
+        let logFrequencyRange = log(maxFrequency) - logMinFrequency
+
         var bands = [Float](repeating: 0, count: 64)
-        // Log-spaced: each band covers increasing bins
-        for i in 0..<64 {
-            // simpler linear-log: map i to bin range
-            let low = Int(pow(Double(i)/64.0, 0.7) * Double(halfN-1))
-            let high = Int(pow(Double(i+1)/64.0, 0.7) * Double(halfN-1))
-            let lo = min(max(low, 0), halfN-1)
-            let hi = min(max(high, lo+1), halfN-1)
-            var sum: Float = 0
-            var maxV: Float = 0
-            for b in lo...hi {
-                sum += mags[b]
-                maxV = max(maxV, mags[b])
+        for index in 0..<64 {
+            let lowFrequency = exp(logMinFrequency + Double(index) / 64 * logFrequencyRange)
+            let highFrequency = exp(logMinFrequency + Double(index + 1) / 64 * logFrequencyRange)
+            let lowBin = min(halfN - 1, max(1, Int(floor(lowFrequency / binWidth))))
+            let highBin = min(halfN - 1, max(lowBin, Int(ceil(highFrequency / binWidth))))
+            var sumSquares: Float = 0
+            var peak: Float = 0
+            for bin in lowBin...highBin {
+                sumSquares += magnitudes[bin] * magnitudes[bin]
+                peak = max(peak, magnitudes[bin])
             }
-            let avg = sum / Float(hi-lo+1)
-            // blend avg and max, apply sensitivity and scale
-            var val = (avg * 0.6 + maxV * 0.4) * 18.0 * Float(sensitivity)
-            // compress with log
-            val = log1p(val * 5) / log1p(5) // normalize 0..1 approx
-            bands[i] = min(1, max(0, val))
+            let bandRMS = sqrt(sumSquares / Float(highBin - lowBin + 1))
+            let magnitude = max(0.000_001, (bandRMS * 0.45 + peak * 0.55) * Float(sensitivity))
+            let frequencyCompensation = Float(index) / 63 * 9
+            let decibels = 20 * log10(magnitude) + frequencyCompensation
+            let normalizedDB = min(1, max(0, (decibels + 72) / 54))
+            bands[index] = pow(normalizedDB, 0.72)
         }
 
-        // Smoothing
-        for i in 0..<64 {
-            let target = bands[i]
-            let cur = smoothedSpectrum[i]
-            let alpha = Float(smoothing)
-            smoothedSpectrum[i] = cur * alpha + target * (1 - alpha)
+        var spreadBands = bands
+        for index in 0..<64 {
+            let left = bands[max(0, index - 1)]
+            let right = bands[min(63, index + 1)]
+            spreadBands[index] = max(
+                bands[index],
+                bands[index] * 0.64 + (left + right) * 0.18
+            )
         }
 
-        // Waveform: downsample signal to 256
-        var wave = [CGFloat](repeating: 0, count: 256)
-        let step = Double(n) / 256.0
-        for i in 0..<256 {
-            let idx = Int(Double(i) * step)
-            wave[i] = CGFloat(signal[idx]) * CGFloat(sensitivity) * 2.5
+        for index in 0..<64 {
+            let target = spreadBands[index]
+            let current = smoothedSpectrum[index]
+            let alpha = target > current
+                ? min(0.55, Float(smoothing) * 0.55)
+                : min(0.96, 0.55 + Float(smoothing) * 0.43)
+            smoothedSpectrum[index] = current * alpha + target * (1 - alpha)
         }
+
+        var visualWaveform = [CGFloat](repeating: 0, count: 256)
+        let waveformStep = Double(copyCount) / 256
+        for index in 0..<256 {
+            let sampleIndex = min(copyCount - 1, Int(Double(index) * waveformStep))
+            let value = (samples[sampleIndex] - mean) * Float(sensitivity) * 2.5
+            visualWaveform[index] = CGFloat(min(1, max(-1, value)))
+        }
+
+        let lowestDominantBin = max(1, Int(minFrequency / binWidth))
+        let highestDominantBin = min(halfN - 1, Int(maxFrequency / binWidth))
+        var dominantBin = lowestDominantBin
+        if lowestDominantBin <= highestDominantBin {
+            for bin in lowestDominantBin...highestDominantBin where magnitudes[bin] > magnitudes[dominantBin] {
+                dominantBin = bin
+            }
+        }
+        let frequency = magnitudes[dominantBin] > 0.000_001
+            ? Double(dominantBin) * binWidth
+            : 0
+        let visualSpectrum = smoothedSpectrum.map { CGFloat($0) }
 
         DispatchQueue.main.async { [weak self] in
-            self?.spectrum = self?.smoothedSpectrum.map { CGFloat($0) } ?? []
-            self?.waveform = wave
-            self?.volume = vol
+            self?.spectrum = visualSpectrum
+            self?.waveform = visualWaveform
+            self?.volume = visualVolume
+            self?.dominantFrequency = frequency
+        }
+    }
+}
+
+extension AudioEngineManager: SCStreamOutput, SCStreamDelegate {
+    func stream(
+        _ stream: SCStream,
+        didOutputSampleBuffer sampleBuffer: CMSampleBuffer,
+        of outputType: SCStreamOutputType
+    ) {
+        guard outputType == .audio else { return }
+        processSystemAudioBuffer(sampleBuffer)
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        DispatchQueue.main.async { [weak self, weak stream] in
+            guard let self, let stream, self.systemAudioStream === stream else { return }
+            self.systemAudioStream = nil
+            self.isStarting = false
+            self.isRunning = false
+            self.captureError = "System audio capture stopped: \(error.localizedDescription)"
+        }
+    }
+}
+
+private enum AudioCaptureError: LocalizedError {
+    case noDisplay
+
+    var errorDescription: String? {
+        switch self {
+        case .noDisplay:
+            return "No display is available for system audio capture."
         }
     }
 }

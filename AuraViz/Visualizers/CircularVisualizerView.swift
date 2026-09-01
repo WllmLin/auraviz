@@ -42,12 +42,10 @@ struct CircularVisualizerView: View {
                 // radial bars
                 let count = 72
                 let barMax = min(w,h) * 0.28
-                let spectrumCount = spectrum.count
                 for i in 0..<count {
                     let angle = (Double(i)/Double(count) * 2 * .pi) - .pi/2 + t*0.18 // slow rotation
-                    let specIdx = Int(Double(i)/Double(count) * Double(spectrumCount))
-                    let amp = spectrum[min(specIdx, spectrumCount-1)]
-                    let len = barMax * Double(amp) * sensitivity * 0.95 + 6 + Double(volume)*10
+                    let amp = circularAmplitude(at: i, barCount: count)
+                    let len = barMax * Double(amp) * sensitivity * 0.95 + 8
                     let innerR = radius + 6
                     let outerR = innerR + len
                     let x1 = center.x + cos(angle) * innerR
@@ -99,6 +97,37 @@ struct CircularVisualizerView: View {
             }
         }
         .background(Color.clear)
+    }
+
+    /// Folds the spectrum twice around the ring, then blends local frequency
+    /// detail with the overall level. A frequency is therefore represented on
+    /// opposite sides of the circle and every bar still responds to the beat.
+    private func circularAmplitude(at index: Int, barCount: Int) -> CGFloat {
+        guard !spectrum.isEmpty, barCount > 0 else { return 0 }
+
+        let phase = Double(index) / Double(barCount) * 4.0
+        let cycle = phase.truncatingRemainder(dividingBy: 2.0)
+        let foldedPosition = cycle <= 1.0 ? cycle : 2.0 - cycle
+        let spectrumPosition = foldedPosition * Double(spectrum.count - 1)
+        let lowerIndex = Int(floor(spectrumPosition))
+        let upperIndex = min(spectrum.count - 1, lowerIndex + 1)
+        let fraction = CGFloat(spectrumPosition - Double(lowerIndex))
+        let interpolated = spectrum[lowerIndex] * (1 - fraction) + spectrum[upperIndex] * fraction
+
+        var neighborhood: CGFloat = 0
+        var weightTotal: CGFloat = 0
+        for offset in -2...2 {
+            let sampleIndex = min(spectrum.count - 1, max(0, lowerIndex + offset))
+            let weight = CGFloat(3 - abs(offset))
+            neighborhood += spectrum[sampleIndex] * weight
+            weightTotal += weight
+        }
+        neighborhood /= max(1, weightTotal)
+
+        let detailedEnergy = max(interpolated, neighborhood * 0.9)
+        let compressedEnergy = pow(min(1, max(0, detailedEnergy)), 0.72)
+        let sharedPulse = min(1, max(0, volume))
+        return min(1, compressedEnergy * 0.82 + sharedPulse * 0.30)
     }
 }
 

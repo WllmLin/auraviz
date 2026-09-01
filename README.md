@@ -12,13 +12,13 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - **Y2K Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
 
 - **Audio input**
-  - **Synth mode** (default) — controllable **Volume** (0–100%), **Frequency** (20–800 Hz, log-mapped), **Complexity** (harmonic richness). No mic needed, perfect for demo.
-  - **Microphone mode** — live mic via `AVAudioEngine`, 1024-point FFT via `Accelerate/vDSP`, 64-band log-spaced spectrum, RMS volume. Permission requested via `AVCaptureDevice`.
+  - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
+  - **Microphone mode** — optional live mic via `AVAudioEngine`.
+  - Both live inputs use a 4096-point FFT via `Accelerate/vDSP`, a 64-band log-spaced spectrum, RMS volume, waveform samples, and dominant-frequency detection.
 
 - **Controls**
-  - Volume / Frequency / Complexity (synth)
   - Sensitivity (0.3–2.2×) + Smoothing (0–92%)
-  - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Mono
+  - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Mono / Stockholm / Tokyo Night / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
 
 - **Aesthetic**
@@ -33,7 +33,7 @@ AuraViz/
 │   ├── AuraVizApp.swift               # @main App, WindowGroup
 │   ├── ContentView.swift              # Header, 420pt visualizer card, controls
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
-│   ├── AudioEngineManager.swift       # AVAudioEngine + synth + vDSP FFT
+│   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
 │   ├── Visualizers/
 │   │   ├── CircularVisualizerView.swift
 │   │   ├── WaveVisualizerView.swift
@@ -72,8 +72,8 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 
 ## Audio details
 
-- **Synth:** Timer at 60 Hz generates 256-point waveform (sine + harmonics + noise) and 64-band spectrum (Gaussian bell centered at log-mapped peakBand + bass boost + shimmer). Smoothing is exponential (`cur*α + target*(1-α)`).
-- **Mic:** Tap 1024 frames, Hann window, pack even/odd into `DSPSplitComplex`, `vDSP.FFT<DSPSplitComplex>.forward`, `vDSP_zvabs` → 512 mags → log-grouped into 64 bands, `log1p` compression, sensitivity + smoothing.
+- **System audio:** `ScreenCaptureKit` provides 48 kHz stereo PCM from apps playing through the Mac. The channels are mixed to mono for analysis, accumulated into overlapping 4096-sample windows, then transformed into waveform, level, frequency, and spectrum values.
+- **Analysis:** Hann window, real FFT, logarithmic 35 Hz–16 kHz bands, decibel compression, sensitivity, and fast-attack/exponential-release smoothing.
 
 ## Customization
 
@@ -83,9 +83,9 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 
 ## Troubleshooting
 
-- **Mic shows 0:** Click “Enable Microphone” and allow in System Settings → Privacy & Security → Microphone → AuraViz. The app falls back to Synth if denied.
+- **System audio shows 0:** Play audio in another app. If prompted, allow AuraViz in System Settings → Privacy & Security → Screen & System Audio Recording, then press Start again (or relaunch if macOS asks you to).
+- **Mic shows 0:** Click “Enable Microphone” and allow it in System Settings → Privacy & Security → Microphone → AuraViz.
 - **`actool` / `xcodebuild -runFirstLaunch` fails:** Run Xcode.app once and accept the license via GUI; thereafter CLI builds work.
-- **No sound needed:** Use Synth mode — move Frequency 80→320 Hz while Y2K is selected to hear/see the sweep.
 
 ## License
 

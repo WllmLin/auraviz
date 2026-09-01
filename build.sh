@@ -22,6 +22,7 @@ cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
     <key>CFBundleDevelopmentRegion</key><string>en</string>
     <key>CFBundleDisplayName</key><string>AuraViz</string>
     <key>CFBundleExecutable</key><string>AuraViz</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleIdentifier</key><string>com.auraviz.app</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>AuraViz</string>
@@ -35,6 +36,14 @@ cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
 </dict>
 </plist>
 PLIST
+
+# Package the same complete icon set used by Xcode into the standalone app.
+ICON_WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$ICON_WORK_DIR"' EXIT
+mkdir -p "$ICON_WORK_DIR/AppIcon.iconset"
+cp "$SRC/Assets.xcassets/AppIcon.appiconset"/icon_*.png "$ICON_WORK_DIR/AppIcon.iconset/"
+iconutil -c icns "$ICON_WORK_DIR/AppIcon.iconset" -o "$PROJECT_DIR/build/AuraViz.app/Contents/Resources/AppIcon.icns"
+
 echo "APPLAura" > "$PROJECT_DIR/build/AuraViz.app/Contents/PkgInfo"
 codesign --force --deep --sign - "$PROJECT_DIR/build/AuraViz.app" 2>&1 | head
 echo "✅ build/AuraViz.app — $(du -h "$PROJECT_DIR/build/AuraViz.app" | tail -1)"
