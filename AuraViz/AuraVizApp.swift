@@ -26,7 +26,7 @@ struct AuraVizApp: App {
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [
                         .applicationName: "AuraViz",
                         .applicationVersion: "1.0 • Aesthetic Visualizer",
-                        .credits: NSAttributedString(string: "Circle • Waves • Y2K Bars\nBuilt with SwiftUI + ScreenCaptureKit + Accelerate")
+                        .credits: NSAttributedString(string: "Circle • Waves • Bars\nBuilt with SwiftUI + ScreenCaptureKit + Accelerate")
                     ])
                 }
             }

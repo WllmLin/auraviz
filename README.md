@@ -9,7 +9,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
 - **Three visualizers**
   - **Circle** — radial spectrum around a pulsing glass core (60 bars, glow tips, orbit ring)
   - **Waves** — three layered filled sine waves driven by low/mid/high bands + live waveform, with grid and central orb
-  - **Y2K Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
+  - **Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
 
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
@@ -18,7 +18,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
 
 - **Controls**
   - Sensitivity (0.3–2.2×) + Smoothing (0–92%)
-  - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Mono / Stockholm / Tokyo Night / Chrome
+  - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
 
 - **Aesthetic**

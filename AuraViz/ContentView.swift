@@ -134,21 +134,6 @@ struct ContentView: View {
                             .background(.black.opacity(0.45), in: Capsule())
                             .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
 
-                            Spacer()
-                            HStack(spacing: 10) {
-                                Label(
-                                    audio.dominantFrequency > 0
-                                        ? String(format: "%.0f Hz", audio.dominantFrequency)
-                                        : "-- Hz",
-                                    systemImage: "waveform"
-                                )
-                                Label(String(format: "%.0f%%", audio.volume*100), systemImage: "speaker.wave.2")
-                            }
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .background(.black.opacity(0.42), in: Capsule())
-                            .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
                         }
                         .padding(14)
                         Spacer()
