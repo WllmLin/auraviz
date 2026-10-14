@@ -6,9 +6,10 @@ struct WaveVisualizerView: View {
     var volume: CGFloat
     var theme: ColorTheme
     var sensitivity: Double
+    var isActive: Bool = true
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0/60.0)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 let w = size.width

@@ -5,19 +5,14 @@ struct Y2KBarVisualizerView: View {
     var volume: CGFloat
     var theme: ColorTheme
     var sensitivity: Double
-    @State private var peaks: [CGFloat] = Array(repeating: 0, count: 32)
 
     var barCount: Int { 32 }
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0/60.0)) { timeline in
-            let _ = timeline.date.timeIntervalSinceReferenceDate
-            Canvas { context, size in
-                draw(in: context, size: size)
-            }
+        Canvas { context, size in
+            draw(in: context, size: size)
         }
         .background(Color.clear)
-        .onAppear { peaks = Array(repeating: 0, count: barCount) }
     }
 
     private func draw(in context: GraphicsContext, size: CGSize) {

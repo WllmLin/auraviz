@@ -66,6 +66,7 @@ A helper script that mirrors what Xcode does, using the Xcode toolchain directly
 `build.sh` compiles with:
 ```
 swiftc -sdk $(xcrun --show-sdk-path) \
+  -O -whole-module-optimization \
   -target arm64-apple-macosx14.0 \
   -load-plugin-library .../libSwiftUIMacros.dylib ...
 ```
@@ -73,13 +74,20 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 ## Audio details
 
 - **System audio:** `ScreenCaptureKit` provides 48 kHz stereo PCM from apps playing through the Mac. The channels are mixed to mono for analysis, accumulated into overlapping 4096-sample windows, then transformed into waveform, level, frequency, and spectrum values.
-- **Analysis:** Hann window, real FFT, logarithmic 35 Hz–16 kHz bands, decibel compression, sensitivity, and fast-attack/exponential-release smoothing.
+- **Analysis:** Hann window, real FFT, logarithmic 35 Hz–16 kHz bands, decibel compression, sensitivity, and fast-attack/exponential-release smoothing. System audio uses 50% overlap (about 23 updates/second at 48 kHz), while fixed ring/work buffers avoid allocations and array shifts in the hot path.
+
+## Performance
+
+- Circle can switch between 30 and 60 FPS, while Waves animate at 30 FPS; both stop scheduling frames when paused.
+- Bars redraw only when new audio data arrives; there is no independent animation timer.
+- Frequency-band boundaries are cached per sample rate, FFT storage is reused, and each analysis publishes one combined SwiftUI update.
+- The standalone packaging script uses whole-module optimization for its production binary.
 
 ## Customization
 
 - Add a theme in `Theme.swift` → `ColorTheme` enum.
 - Tweak bar counts: `CircularVisualizerView` 72 bars, `Y2KBarVisualizerView` 32 bars.
-- Adjust `barMax`, `sensitivity` scaling, or `TimelineView` cadence (`1/60`).
+- Adjust `barMax`, `sensitivity` scaling, or the Circle FPS toggle in `ContentView.swift`.
 
 ## Troubleshooting
 

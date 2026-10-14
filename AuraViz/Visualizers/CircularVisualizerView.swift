@@ -5,9 +5,11 @@ struct CircularVisualizerView: View {
     var volume: CGFloat
     var theme: ColorTheme
     var sensitivity: Double
+    var framesPerSecond: Int = 30
+    var isActive: Bool = true
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1.0/60.0)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / Double(max(1, framesPerSecond)), paused: !isActive)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 let w = size.width

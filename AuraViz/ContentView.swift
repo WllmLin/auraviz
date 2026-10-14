@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var selectedMode: VisualMode = .circle
     @State private var selectedTheme: ColorTheme = .aurora
     @State private var showSettings = true
+    @State private var circleFramesPerSecond = 30
 
     var body: some View {
         ZStack {
@@ -107,9 +108,16 @@ struct ContentView: View {
                     Group {
                         switch selectedMode {
                         case .circle:
-                            CircularVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity)
+                            CircularVisualizerView(
+                                spectrum: audio.spectrum,
+                                volume: audio.volume,
+                                theme: selectedTheme,
+                                sensitivity: audio.sensitivity,
+                                framesPerSecond: circleFramesPerSecond,
+                                isActive: audio.isRunning
+                            )
                         case .waves:
-                            WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity)
+                            WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning)
                         case .y2k:
                             Y2KBarVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity)
                         }
@@ -134,6 +142,27 @@ struct ContentView: View {
                             .background(.black.opacity(0.45), in: Capsule())
                             .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
 
+                            Spacer()
+
+                            if selectedMode == .circle {
+                                Button {
+                                    circleFramesPerSecond = circleFramesPerSecond == 30 ? 60 : 30
+                                } label: {
+                                    Label("\(circleFramesPerSecond) FPS", systemImage: "speedometer")
+                                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                                        .tracking(0.5)
+                                        .foregroundStyle(.white.opacity(0.85))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 6)
+                                        .background(.black.opacity(0.45), in: Capsule())
+                                        .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+                                }
+                                .buttonStyle(.plain)
+                                .help("Switch circle to \(circleFramesPerSecond == 30 ? 60 : 30) FPS")
+                                .accessibilityLabel("Circle frame rate")
+                                .accessibilityValue("\(circleFramesPerSecond) frames per second")
+                                .accessibilityHint("Switches to \(circleFramesPerSecond == 30 ? 60 : 30) frames per second")
+                            }
                         }
                         .padding(14)
                         Spacer()

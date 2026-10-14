@@ -10,7 +10,7 @@ for lib in $PLUGIN/*.dylib; do LIBS="$LIBS -load-plugin-library $lib"; done
 echo "▸ Compiling AuraViz (arm64, macOS 14)…"
 mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS"
 mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources"
-$TC/swiftc -sdk $SDK -target arm64-apple-macosx14.0 $LIBS \
+$TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $LIBS \
   -o "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS/AuraViz" \
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/Theme.swift" \
   "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift"

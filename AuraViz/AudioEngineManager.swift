@@ -13,11 +13,15 @@ enum InputMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+private struct AudioVisualizationFrame {
+    var spectrum: [CGFloat] = Array(repeating: 0.05, count: 64)
+    var waveform: [CGFloat] = Array(repeating: 0, count: 256)
+    var volume: CGFloat = 0
+    var dominantFrequency: Double = 0
+}
+
 final class AudioEngineManager: NSObject, ObservableObject {
-    @Published var spectrum: [CGFloat] = Array(repeating: 0.05, count: 64)
-    @Published var waveform: [CGFloat] = Array(repeating: 0, count: 256)
-    @Published var volume: CGFloat = 0
-    @Published var dominantFrequency: Double = 0
+    @Published private var visualization = AudioVisualizationFrame()
     @Published var isRunning = false
     @Published var isStarting = false
     @Published var captureError: String?
@@ -33,21 +37,50 @@ final class AudioEngineManager: NSObject, ObservableObject {
     @Published var micPermissionGranted = false
     @Published var systemAudioPermissionGranted = false
 
+    var spectrum: [CGFloat] { visualization.spectrum }
+    var waveform: [CGFloat] { visualization.waveform }
+    var volume: CGFloat { visualization.volume }
+    var dominantFrequency: Double { visualization.dominantFrequency }
+
     private var microphoneEngine: AVAudioEngine?
     private var systemAudioStream: SCStream?
     private var systemAudioStartTask: Task<Void, Never>?
     private var captureRequestID = UUID()
     private let audioProcessingQueue = DispatchQueue(
         label: "com.auraviz.system-audio",
-        qos: .userInteractive
+        qos: .userInitiated
     )
-    private var systemSampleAccumulator: [Float] = []
 
     private let fftSize = 4096
+    private let fftHopSize = 2048
     private let log2n: vDSP_Length = 12 // 2^12 = 4096
     private var fftSetup: FFTSetup?
     private var window: [Float] = []
     private var smoothedSpectrum: [Float] = Array(repeating: 0, count: 64)
+
+    // Fixed storage keeps the real-time path from allocating and shifting an
+    // ever-growing sample array for every overlapping FFT window.
+    private var systemSampleRing = [Float](repeating: 0, count: 4096)
+    private var systemRingWriteIndex = 0
+    private var systemRingSampleCount = 0
+    private var systemSamplesSinceAnalysis = 0
+    private var hasAnalyzedSystemSamples = false
+    private var systemRingSampleRate: Double = 0
+    private var monoScratch: [Float] = []
+    private var analysisFrame = [Float](repeating: 0, count: 4096)
+
+    // FFT workspaces and logarithmic band boundaries are reused between
+    // frames. Only the two arrays handed to SwiftUI are created per update.
+    private var fftSignal = [Float](repeating: 0, count: 4096)
+    private var fftReal = [Float](repeating: 0, count: 2048)
+    private var fftImaginary = [Float](repeating: 0, count: 2048)
+    private var fftMagnitudes = [Float](repeating: 0, count: 2048)
+    private var fftBands = [Float](repeating: 0, count: 64)
+    private var spreadBands = [Float](repeating: 0, count: 64)
+    private var cachedBandSampleRate: Double = 0
+    private var bandBinRanges: [(low: Int, high: Int)] = []
+    private var lowestDominantBin = 1
+    private var highestDominantBin = 1
 
     override init() {
         super.init()
@@ -178,7 +211,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         isStarting = true
         isRunning = false
         audioProcessingQueue.sync {
-            systemSampleAccumulator.removeAll(keepingCapacity: true)
+            resetSystemSampleRing()
         }
 
         systemAudioStartTask?.cancel()
@@ -208,8 +241,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 let configuration = SCStreamConfiguration()
                 configuration.width = 2
                 configuration.height = 2
-                configuration.minimumFrameInterval = CMTime(value: 1, timescale: 2)
-                configuration.queueDepth = 3
+                configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+                configuration.queueDepth = 1
                 configuration.showsCursor = false
                 configuration.capturesAudio = true
                 configuration.sampleRate = 48_000
@@ -267,10 +300,18 @@ final class AudioEngineManager: NSObject, ObservableObject {
         let frameCount = CMSampleBufferGetNumSamples(sampleBuffer)
         guard frameCount > 0 else { return }
 
-        var channelSums = [Float](repeating: 0, count: frameCount)
-        var channelCounts = [Int](repeating: 0, count: frameCount)
+        if monoScratch.count < frameCount {
+            monoScratch = [Float](repeating: 0, count: frameCount)
+        } else {
+            monoScratch.withUnsafeMutableBufferPointer { pointer in
+                vDSP_vclr(pointer.baseAddress!, 1, vDSP_Length(frameCount))
+            }
+        }
+
         let isFloat = (format.mFormatFlags & kAudioFormatFlagIsFloat) != 0
         let isSignedInteger = (format.mFormatFlags & kAudioFormatFlagIsSignedInteger) != 0
+        var availableFrameCount = frameCount
+        var mixedChannelCount = 0
 
         do {
             try sampleBuffer.withAudioBufferList(
@@ -284,42 +325,58 @@ final class AudioEngineManager: NSObject, ObservableObject {
                         let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Float>.size
                         let samples = data.assumingMemoryBound(to: Float.self)
                         let availableFrames = min(frameCount, sampleCount / channels)
-                        for frame in 0..<availableFrames {
+                        guard availableFrames > 0 else { continue }
+                        availableFrameCount = min(availableFrameCount, availableFrames)
+                        monoScratch.withUnsafeMutableBufferPointer { destination in
                             for channel in 0..<channels {
-                                channelSums[frame] += samples[frame * channels + channel]
-                                channelCounts[frame] += 1
+                                vDSP_vadd(
+                                    samples.advanced(by: channel),
+                                    vDSP_Stride(channels),
+                                    destination.baseAddress!,
+                                    1,
+                                    destination.baseAddress!,
+                                    1,
+                                    vDSP_Length(availableFrames)
+                                )
                             }
                         }
+                        mixedChannelCount += channels
                     } else if isFloat, format.mBitsPerChannel == 64 {
                         let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Double>.size
                         let samples = data.assumingMemoryBound(to: Double.self)
                         let availableFrames = min(frameCount, sampleCount / channels)
+                        guard availableFrames > 0 else { continue }
+                        availableFrameCount = min(availableFrameCount, availableFrames)
                         for frame in 0..<availableFrames {
                             for channel in 0..<channels {
-                                channelSums[frame] += Float(samples[frame * channels + channel])
-                                channelCounts[frame] += 1
+                                monoScratch[frame] += Float(samples[frame * channels + channel])
                             }
                         }
+                        mixedChannelCount += channels
                     } else if isSignedInteger, format.mBitsPerChannel == 16 {
                         let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int16>.size
                         let samples = data.assumingMemoryBound(to: Int16.self)
                         let availableFrames = min(frameCount, sampleCount / channels)
+                        guard availableFrames > 0 else { continue }
+                        availableFrameCount = min(availableFrameCount, availableFrames)
                         for frame in 0..<availableFrames {
                             for channel in 0..<channels {
-                                channelSums[frame] += Float(samples[frame * channels + channel]) / 32_768
-                                channelCounts[frame] += 1
+                                monoScratch[frame] += Float(samples[frame * channels + channel]) / 32_768
                             }
                         }
+                        mixedChannelCount += channels
                     } else if isSignedInteger, format.mBitsPerChannel == 32 {
                         let sampleCount = Int(audioBuffer.mDataByteSize) / MemoryLayout<Int32>.size
                         let samples = data.assumingMemoryBound(to: Int32.self)
                         let availableFrames = min(frameCount, sampleCount / channels)
+                        guard availableFrames > 0 else { continue }
+                        availableFrameCount = min(availableFrameCount, availableFrames)
                         for frame in 0..<availableFrames {
                             for channel in 0..<channels {
-                                channelSums[frame] += Float(samples[frame * channels + channel]) / Float(Int32.max)
-                                channelCounts[frame] += 1
+                                monoScratch[frame] += Float(samples[frame * channels + channel]) / Float(Int32.max)
                             }
                         }
+                        mixedChannelCount += channels
                     }
                 }
             }
@@ -327,20 +384,103 @@ final class AudioEngineManager: NSObject, ObservableObject {
             return
         }
 
-        let monoSamples = channelSums.enumerated().map { index, sum in
-            let count = channelCounts[index]
-            return count > 0 ? sum / Float(count) : 0
+        guard mixedChannelCount > 0, availableFrameCount > 0 else { return }
+        var channelScale = 1 / Float(mixedChannelCount)
+        monoScratch.withUnsafeMutableBufferPointer { pointer in
+            vDSP_vsmul(
+                pointer.baseAddress!,
+                1,
+                &channelScale,
+                pointer.baseAddress!,
+                1,
+                vDSP_Length(availableFrameCount)
+            )
         }
-
-        systemSampleAccumulator.append(contentsOf: monoSamples)
-        let hopSize = fftSize / 4
-        while systemSampleAccumulator.count >= fftSize {
-            processSamples(
-                Array(systemSampleAccumulator.prefix(fftSize)),
+        monoScratch.withUnsafeBufferPointer { pointer in
+            appendSystemSamples(
+                UnsafeBufferPointer(start: pointer.baseAddress!, count: availableFrameCount),
                 sampleRate: format.mSampleRate
             )
-            systemSampleAccumulator.removeFirst(hopSize)
         }
+    }
+
+    private func resetSystemSampleRing() {
+        systemRingWriteIndex = 0
+        systemRingSampleCount = 0
+        systemSamplesSinceAnalysis = 0
+        hasAnalyzedSystemSamples = false
+        systemRingSampleRate = 0
+    }
+
+    private func appendSystemSamples(
+        _ samples: UnsafeBufferPointer<Float>,
+        sampleRate: Double
+    ) {
+        guard let source = samples.baseAddress, !samples.isEmpty else { return }
+        if systemRingSampleRate != sampleRate {
+            resetSystemSampleRing()
+            systemRingSampleRate = sampleRate
+        }
+
+        var sourceOffset = 0
+        while sourceOffset < samples.count {
+            let samplesNeeded = hasAnalyzedSystemSamples
+                ? fftHopSize - systemSamplesSinceAnalysis
+                : fftSize - systemRingSampleCount
+            let copyCount = min(samplesNeeded, samples.count - sourceOffset)
+            let firstCopyCount = min(copyCount, fftSize - systemRingWriteIndex)
+
+            systemSampleRing.withUnsafeMutableBufferPointer { destination in
+                destination.baseAddress!
+                    .advanced(by: systemRingWriteIndex)
+                    .update(from: source.advanced(by: sourceOffset), count: firstCopyCount)
+                if firstCopyCount < copyCount {
+                    destination.baseAddress!.update(
+                        from: source.advanced(by: sourceOffset + firstCopyCount),
+                        count: copyCount - firstCopyCount
+                    )
+                }
+            }
+
+            systemRingWriteIndex = (systemRingWriteIndex + copyCount) % fftSize
+            systemRingSampleCount = min(fftSize, systemRingSampleCount + copyCount)
+            sourceOffset += copyCount
+
+            if hasAnalyzedSystemSamples {
+                systemSamplesSinceAnalysis += copyCount
+                if systemSamplesSinceAnalysis == fftHopSize {
+                    analyzeCurrentSystemWindow(sampleRate: sampleRate)
+                    systemSamplesSinceAnalysis = 0
+                }
+            } else if systemRingSampleCount == fftSize {
+                analyzeCurrentSystemWindow(sampleRate: sampleRate)
+                hasAnalyzedSystemSamples = true
+                systemSamplesSinceAnalysis = 0
+            }
+        }
+    }
+
+    private func analyzeCurrentSystemWindow(sampleRate: Double) {
+        let firstCopyCount = fftSize - systemRingWriteIndex
+        analysisFrame.withUnsafeMutableBufferPointer { destination in
+            systemSampleRing.withUnsafeBufferPointer { source in
+                destination.baseAddress!.update(
+                    from: source.baseAddress!.advanced(by: systemRingWriteIndex),
+                    count: firstCopyCount
+                )
+                if systemRingWriteIndex > 0 {
+                    destination.baseAddress!.advanced(by: firstCopyCount).update(
+                        from: source.baseAddress!,
+                        count: systemRingWriteIndex
+                    )
+                }
+            }
+        }
+        processSamples(
+            analysisFrame,
+            sampleRate: sampleRate,
+            smoothingFrameMultiplier: 2
+        )
     }
 
     // MARK: - Microphone
@@ -395,37 +535,48 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     // MARK: - Signal analysis
 
-    private func processSamples(_ samples: [Float], sampleRate: Double) {
+    private func processSamples(
+        _ samples: [Float],
+        sampleRate: Double,
+        smoothingFrameMultiplier: Float = 1
+    ) {
         let frameCount = samples.count
         guard frameCount > 0, sampleRate > 0 else { return }
+        let copyCount = min(frameCount, fftSize)
+        let currentSensitivity = Float(sensitivity)
+        let currentSmoothing = Float(smoothing)
 
         var rms: Float = 0
-        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(frameCount))
-        let adjustedRMS = max(rms * Float(sensitivity), 0.000_001)
+        vDSP_rmsqv(samples, 1, &rms, vDSP_Length(copyCount))
+        let adjustedRMS = max(rms * currentSensitivity, 0.000_001)
         let rmsDB = 20 * log10(adjustedRMS)
         let linearLevel = min(1, max(0, (rmsDB + 60) / 48))
         let visualVolume = CGFloat(pow(linearLevel, 0.72))
 
         var mean: Float = 0
-        vDSP_meanv(samples, 1, &mean, vDSP_Length(frameCount))
-        var signal = [Float](repeating: 0, count: fftSize)
-        let copyCount = min(frameCount, fftSize)
+        vDSP_meanv(samples, 1, &mean, vDSP_Length(copyCount))
         for index in 0..<copyCount {
-            signal[index] = (samples[index] - mean) * window[index]
+            fftSignal[index] = (samples[index] - mean) * window[index]
+        }
+        if copyCount < fftSize {
+            fftSignal.withUnsafeMutableBufferPointer { pointer in
+                vDSP_vclr(
+                    pointer.baseAddress!.advanced(by: copyCount),
+                    1,
+                    vDSP_Length(fftSize - copyCount)
+                )
+            }
         }
 
         let halfN = fftSize / 2
-        var real = [Float](repeating: 0, count: halfN)
-        var imaginary = [Float](repeating: 0, count: halfN)
         for index in 0..<halfN {
-            real[index] = signal[2 * index]
-            imaginary[index] = signal[2 * index + 1]
+            fftReal[index] = fftSignal[2 * index]
+            fftImaginary[index] = fftSignal[2 * index + 1]
         }
-        var magnitudes = [Float](repeating: 0, count: halfN)
 
         guard let fftSetup else { return }
-        real.withUnsafeMutableBufferPointer { realPointer in
-            imaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
+        fftReal.withUnsafeMutableBufferPointer { realPointer in
+            fftImaginary.withUnsafeMutableBufferPointer { imaginaryPointer in
                 var split = DSPSplitComplex(
                     realp: realPointer.baseAddress!,
                     imagp: imaginaryPointer.baseAddress!
@@ -434,54 +585,47 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 var scale = Float(2.0 / Float(fftSize))
                 vDSP_vsmul(split.realp, 1, &scale, split.realp, 1, vDSP_Length(halfN))
                 vDSP_vsmul(split.imagp, 1, &scale, split.imagp, 1, vDSP_Length(halfN))
-                vDSP_zvabs(&split, 1, &magnitudes, 1, vDSP_Length(halfN))
+                vDSP_zvabs(&split, 1, &fftMagnitudes, 1, vDSP_Length(halfN))
             }
         }
-        magnitudes[0] = 0
+        fftMagnitudes[0] = 0
 
-        let binWidth = sampleRate / Double(fftSize)
-        let minFrequency = max(35.0, binWidth)
-        let maxFrequency = min(16_000.0, sampleRate * 0.5 - binWidth)
-        guard maxFrequency > minFrequency else { return }
-        let logMinFrequency = log(minFrequency)
-        let logFrequencyRange = log(maxFrequency) - logMinFrequency
-
-        var bands = [Float](repeating: 0, count: 64)
-        for index in 0..<64 {
-            let lowFrequency = exp(logMinFrequency + Double(index) / 64 * logFrequencyRange)
-            let highFrequency = exp(logMinFrequency + Double(index + 1) / 64 * logFrequencyRange)
-            let lowBin = min(halfN - 1, max(1, Int(floor(lowFrequency / binWidth))))
-            let highBin = min(halfN - 1, max(lowBin, Int(ceil(highFrequency / binWidth))))
+        prepareFrequencyBands(sampleRate: sampleRate)
+        guard bandBinRanges.count == fftBands.count else { return }
+        for index in fftBands.indices {
+            let range = bandBinRanges[index]
             var sumSquares: Float = 0
             var peak: Float = 0
-            for bin in lowBin...highBin {
-                sumSquares += magnitudes[bin] * magnitudes[bin]
-                peak = max(peak, magnitudes[bin])
+            for bin in range.low...range.high {
+                sumSquares += fftMagnitudes[bin] * fftMagnitudes[bin]
+                peak = max(peak, fftMagnitudes[bin])
             }
-            let bandRMS = sqrt(sumSquares / Float(highBin - lowBin + 1))
-            let magnitude = max(0.000_001, (bandRMS * 0.45 + peak * 0.55) * Float(sensitivity))
+            let bandRMS = sqrt(sumSquares / Float(range.high - range.low + 1))
+            let magnitude = max(0.000_001, (bandRMS * 0.45 + peak * 0.55) * currentSensitivity)
             let frequencyCompensation = Float(index) / 63 * 9
             let decibels = 20 * log10(magnitude) + frequencyCompensation
             let normalizedDB = min(1, max(0, (decibels + 72) / 54))
-            bands[index] = pow(normalizedDB, 0.72)
+            fftBands[index] = pow(normalizedDB, 0.72)
         }
 
-        var spreadBands = bands
         for index in 0..<64 {
-            let left = bands[max(0, index - 1)]
-            let right = bands[min(63, index + 1)]
+            let left = fftBands[max(0, index - 1)]
+            let right = fftBands[min(63, index + 1)]
             spreadBands[index] = max(
-                bands[index],
-                bands[index] * 0.64 + (left + right) * 0.18
+                fftBands[index],
+                fftBands[index] * 0.64 + (left + right) * 0.18
             )
         }
 
         for index in 0..<64 {
             let target = spreadBands[index]
             let current = smoothedSpectrum[index]
-            let alpha = target > current
-                ? min(0.55, Float(smoothing) * 0.55)
-                : min(0.96, 0.55 + Float(smoothing) * 0.43)
+            let baseAlpha = target > current
+                ? min(0.55, currentSmoothing * 0.55)
+                : min(0.96, 0.55 + currentSmoothing * 0.43)
+            // System audio now analyzes half as often, so applying two old
+            // smoothing steps at once keeps the response time unchanged.
+            let alpha = pow(baseAlpha, smoothingFrameMultiplier)
             smoothedSpectrum[index] = current * alpha + target * (1 - alpha)
         }
 
@@ -489,29 +633,58 @@ final class AudioEngineManager: NSObject, ObservableObject {
         let waveformStep = Double(copyCount) / 256
         for index in 0..<256 {
             let sampleIndex = min(copyCount - 1, Int(Double(index) * waveformStep))
-            let value = (samples[sampleIndex] - mean) * Float(sensitivity) * 2.5
+            let value = (samples[sampleIndex] - mean) * currentSensitivity * 2.5
             visualWaveform[index] = CGFloat(min(1, max(-1, value)))
         }
 
-        let lowestDominantBin = max(1, Int(minFrequency / binWidth))
-        let highestDominantBin = min(halfN - 1, Int(maxFrequency / binWidth))
         var dominantBin = lowestDominantBin
         if lowestDominantBin <= highestDominantBin {
-            for bin in lowestDominantBin...highestDominantBin where magnitudes[bin] > magnitudes[dominantBin] {
+            for bin in lowestDominantBin...highestDominantBin where fftMagnitudes[bin] > fftMagnitudes[dominantBin] {
                 dominantBin = bin
             }
         }
-        let frequency = magnitudes[dominantBin] > 0.000_001
+        let binWidth = sampleRate / Double(fftSize)
+        let frequency = fftMagnitudes[dominantBin] > 0.000_001
             ? Double(dominantBin) * binWidth
             : 0
         let visualSpectrum = smoothedSpectrum.map { CGFloat($0) }
 
         DispatchQueue.main.async { [weak self] in
-            self?.spectrum = visualSpectrum
-            self?.waveform = visualWaveform
-            self?.volume = visualVolume
-            self?.dominantFrequency = frequency
+            self?.visualization = AudioVisualizationFrame(
+                spectrum: visualSpectrum,
+                waveform: visualWaveform,
+                volume: visualVolume,
+                dominantFrequency: frequency
+            )
         }
+    }
+
+    private func prepareFrequencyBands(sampleRate: Double) {
+        guard sampleRate != cachedBandSampleRate else { return }
+
+        let halfN = fftSize / 2
+        let binWidth = sampleRate / Double(fftSize)
+        let minFrequency = max(35.0, binWidth)
+        let maxFrequency = min(16_000.0, sampleRate * 0.5 - binWidth)
+        guard maxFrequency > minFrequency else {
+            bandBinRanges.removeAll(keepingCapacity: true)
+            cachedBandSampleRate = sampleRate
+            return
+        }
+
+        let logMinFrequency = log(minFrequency)
+        let logFrequencyRange = log(maxFrequency) - logMinFrequency
+        bandBinRanges.removeAll(keepingCapacity: true)
+        for index in 0..<64 {
+            let lowFrequency = exp(logMinFrequency + Double(index) / 64 * logFrequencyRange)
+            let highFrequency = exp(logMinFrequency + Double(index + 1) / 64 * logFrequencyRange)
+            let lowBin = min(halfN - 1, max(1, Int(floor(lowFrequency / binWidth))))
+            let highBin = min(halfN - 1, max(lowBin, Int(ceil(highFrequency / binWidth))))
+            bandBinRanges.append((low: lowBin, high: highBin))
+        }
+        lowestDominantBin = max(1, Int(minFrequency / binWidth))
+        highestDominantBin = min(halfN - 1, Int(maxFrequency / binWidth))
+        cachedBandSampleRate = sampleRate
     }
 }
 
