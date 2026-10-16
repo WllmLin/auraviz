@@ -7,7 +7,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
 ## Features
 
 - **Three visualizers**
-  - **Circle** — radial spectrum around a pulsing glass core (60 bars, glow tips, orbit ring)
+  - **Circle** — radial spectrum around a neon LED-tunnel core: BPM-synced tunnel rings, spectrum dot meter, segmented LED ring and a neon rim that flares with a shockwave on every kick
   - **Waves** — three layered filled sine waves driven by low/mid/high bands + live waveform, with grid and central orb
   - **Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
 

@@ -266,7 +266,10 @@ struct ContentView: View {
                     theme: selectedTheme,
                     sensitivity: audio.sensitivity,
                     framesPerSecond: circleFramesPerSecond,
-                    isActive: audio.isRunning
+                    isActive: audio.isRunning,
+                    lastBeatTime: audio.lastBeatTime,
+                    beatStrength: audio.beatStrength,
+                    beatClock: audio.beatClock
                 )
             case .waves:
                 WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning)
