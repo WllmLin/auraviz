@@ -18,6 +18,7 @@ private struct AudioVisualizationFrame {
     var waveform: [CGFloat] = Array(repeating: 0, count: 256)
     var volume: CGFloat = 0
     var dominantFrequency: Double = 0
+    var beat = BeatAnalysis()
 }
 
 final class AudioEngineManager: NSObject, ObservableObject {
@@ -41,6 +42,23 @@ final class AudioEngineManager: NSObject, ObservableObject {
     var waveform: [CGFloat] { visualization.waveform }
     var volume: CGFloat { visualization.volume }
     var dominantFrequency: Double { visualization.dominantFrequency }
+
+    // Beat and tempo. For display-rate animation, read the clock inside a
+    // TimelineView: `beatClock.beatPhase(at: BeatClock.time(for: timeline.date))`.
+    var isBeat: Bool { visualization.beat.isBeat }
+    var beatCount: Int { visualization.beat.beatCount }
+    var lastBeatTime: TimeInterval { visualization.beat.lastBeatTime }
+    var beatStrength: CGFloat { visualization.beat.beatStrength }
+    var bpm: Double { visualization.beat.bpm }
+    var onsetFlux: CGFloat { visualization.beat.onsetFlux }
+    var bassEnvelope: CGFloat { visualization.beat.bassEnvelope }
+    var beatClock: BeatClock { visualization.beat.clock }
+    var beatPhase: Double { beatClock.beatPhase(at: BeatClock.now) }
+    var barPhase: Double { beatClock.barPhase(at: BeatClock.now) }
+
+    func bassEnvelope(at time: TimeInterval) -> CGFloat {
+        visualization.beat.bassEnvelope(at: time)
+    }
 
     private var microphoneEngine: AVAudioEngine?
     private var systemAudioStream: SCStream?
@@ -81,6 +99,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private var bandBinRanges: [(low: Int, high: Int)] = []
     private var lowestDominantBin = 1
     private var highestDominantBin = 1
+    private var lowestBassBin = 1
+    private var highestBassBin = 1
+    private let beatTracker = BeatTracker()
 
     override init() {
         super.init()
@@ -118,6 +139,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     func start() {
         captureError = nil
+        audioProcessingQueue.async { [weak self] in
+            self?.beatTracker.resetSignalState()
+        }
         switch inputMode {
         case .systemAudio:
             startSystemAudio()
@@ -141,6 +165,20 @@ final class AudioEngineManager: NSObject, ObservableObject {
         stopMicrophone()
         isRunning = false
         isStarting = false
+    }
+
+    /// Tap on each beat: the first tap after a pause marks a downbeat, further
+    /// taps set the tempo and re-sync the beat grid.
+    func tapTempo() {
+        let tapTime = BeatClock.now
+        audioProcessingQueue.async { [weak self] in
+            guard let self else { return }
+            let beat = self.beatTracker.tap(at: tapTime)
+            DispatchQueue.main.async { [weak self] in
+                self?.visualization.beat.bpm = beat.bpm
+                self?.visualization.beat.clock = beat.clock
+            }
+        }
     }
 
     func resetVisualizationControls() {
@@ -449,18 +487,18 @@ final class AudioEngineManager: NSObject, ObservableObject {
             if hasAnalyzedSystemSamples {
                 systemSamplesSinceAnalysis += copyCount
                 if systemSamplesSinceAnalysis == fftHopSize {
-                    analyzeCurrentSystemWindow(sampleRate: sampleRate)
+                    analyzeCurrentSystemWindow(sampleRate: sampleRate, advancedSampleCount: fftHopSize)
                     systemSamplesSinceAnalysis = 0
                 }
             } else if systemRingSampleCount == fftSize {
-                analyzeCurrentSystemWindow(sampleRate: sampleRate)
+                analyzeCurrentSystemWindow(sampleRate: sampleRate, advancedSampleCount: fftSize)
                 hasAnalyzedSystemSamples = true
                 systemSamplesSinceAnalysis = 0
             }
         }
     }
 
-    private func analyzeCurrentSystemWindow(sampleRate: Double) {
+    private func analyzeCurrentSystemWindow(sampleRate: Double, advancedSampleCount: Int) {
         let firstCopyCount = fftSize - systemRingWriteIndex
         analysisFrame.withUnsafeMutableBufferPointer { destination in
             systemSampleRing.withUnsafeBufferPointer { source in
@@ -479,7 +517,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
         processSamples(
             analysisFrame,
             sampleRate: sampleRate,
-            smoothingFrameMultiplier: 2
+            smoothingFrameMultiplier: 2,
+            advancedSampleCount: advancedSampleCount
         )
     }
 
@@ -538,7 +577,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private func processSamples(
         _ samples: [Float],
         sampleRate: Double,
-        smoothingFrameMultiplier: Float = 1
+        smoothingFrameMultiplier: Float = 1,
+        advancedSampleCount: Int? = nil
     ) {
         let frameCount = samples.count
         guard frameCount > 0, sampleRate > 0 else { return }
@@ -608,6 +648,23 @@ final class AudioEngineManager: NSObject, ObservableObject {
             fftBands[index] = pow(normalizedDB, 0.72)
         }
 
+        // Kick-drum band for beat detection, independent of the smoothed spectrum.
+        var bassEnergy: Float = 0
+        for bin in lowestBassBin...highestBassBin {
+            bassEnergy += fftMagnitudes[bin] * fftMagnitudes[bin]
+        }
+        let bassRMS = sqrt(bassEnergy / Float(highestBassBin - lowestBassBin + 1))
+        let bassDB = 20 * log10(max(0.000_001, bassRMS * currentSensitivity))
+        let bassLevel = min(1, max(0, (bassDB + 48) / 36))
+        let beat = beatTracker.analyze(
+            bassEnergy: bassEnergy,
+            bassLevel: bassLevel,
+            bands: fftBands,
+            advancedSampleCount: advancedSampleCount ?? frameCount,
+            sampleRate: sampleRate,
+            arrivalTime: BeatClock.now
+        )
+
         for index in 0..<64 {
             let left = fftBands[max(0, index - 1)]
             let right = fftBands[min(63, index + 1)]
@@ -654,7 +711,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 spectrum: visualSpectrum,
                 waveform: visualWaveform,
                 volume: visualVolume,
-                dominantFrequency: frequency
+                dominantFrequency: frequency,
+                beat: beat
             )
         }
     }
@@ -684,6 +742,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
         }
         lowestDominantBin = max(1, Int(minFrequency / binWidth))
         highestDominantBin = min(halfN - 1, Int(maxFrequency / binWidth))
+        lowestBassBin = min(halfN - 1, max(1, Int((40 / binWidth).rounded())))
+        highestBassBin = min(halfN - 1, max(lowestBassBin, Int((150 / binWidth).rounded())))
         cachedBandSampleRate = sampleRate
     }
 }

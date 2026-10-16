@@ -20,6 +20,7 @@ files = [
     ("AuraVizApp.swift", "AuraViz/AuraVizApp.swift"),
     ("ContentView.swift", "AuraViz/ContentView.swift"),
     ("AudioEngineManager.swift", "AuraViz/AudioEngineManager.swift"),
+    ("BeatTracker.swift", "AuraViz/BeatTracker.swift"),
     ("Theme.swift", "AuraViz/Theme.swift"),
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
@@ -121,6 +122,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['AuraVizApp.swift']} /* AuraVizApp.swift */,
 \t\t\t\t{file_refs['ContentView.swift']} /* ContentView.swift */,
 \t\t\t\t{file_refs['AudioEngineManager.swift']} /* AudioEngineManager.swift */,
+\t\t\t\t{file_refs['BeatTracker.swift']} /* BeatTracker.swift */,
 \t\t\t\t{file_refs['Theme.swift']} /* Theme.swift */,
 \t\t\t\t{visualizers_group_id} /* Visualizers */,
 \t\t\t\t{file_refs['Assets.xcassets']} /* Assets.xcassets */,
@@ -217,7 +219,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
@@ -431,7 +433,7 @@ pbx += """/* End XCConfigurationList section */
 \trootObject = """
 pbx += f"{proj_id} /* Project object */;\n}}\n"
 
-out_path = "/Users/wlinwork/projects/AuraViz/AuraViz.xcodeproj/project.pbxproj"
+out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "AuraViz.xcodeproj/project.pbxproj")
 os.makedirs(os.path.dirname(out_path), exist_ok=True)
 with open(out_path, "w") as f:
     f.write(pbx)

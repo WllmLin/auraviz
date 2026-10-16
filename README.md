@@ -34,6 +34,7 @@ AuraViz/
 │   ├── ContentView.swift              # Header, 420pt visualizer card, controls
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
+│   ├── BeatTracker.swift              # Kick onsets, spectral flux, BPM, beat phase, tap tempo
 │   ├── Visualizers/
 │   │   ├── CircularVisualizerView.swift
 │   │   ├── WaveVisualizerView.swift

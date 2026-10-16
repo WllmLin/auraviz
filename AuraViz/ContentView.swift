@@ -142,6 +142,32 @@ struct ContentView: View {
                             .background(.black.opacity(0.45), in: Capsule())
                             .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
 
+                            Button {
+                                audio.tapTempo()
+                            } label: {
+                                HStack(spacing: 6) {
+                                    BeatFlashDot(
+                                        lastBeatTime: audio.lastBeatTime,
+                                        strength: audio.beatStrength,
+                                        color: selectedTheme.gradient.first!,
+                                        isActive: audio.isRunning
+                                    )
+                                    Text(audio.bpm > 0 ? String(format: "%.0f BPM", audio.bpm) : "--- BPM")
+                                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                                        .tracking(0.5)
+                                        .foregroundStyle(.white.opacity(0.85))
+                                }
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(.black.opacity(0.45), in: Capsule())
+                                .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                            .keyboardShortcut("t", modifiers: [])
+                            .help("Click or press T on each beat to tap the tempo")
+                            .accessibilityLabel("Tempo")
+                            .accessibilityValue(audio.bpm > 0 ? String(format: "%.0f beats per minute", audio.bpm) : "Detecting")
+                            .accessibilityHint("Tap on each beat to set the tempo")
+
                             Spacer()
 
                             if selectedMode == .circle {
@@ -328,6 +354,27 @@ struct ContentView: View {
             }
             .frame(width: 90, height: 6)
         }
+    }
+}
+
+/// Flashes on each detected beat and fades out over ~150 ms.
+private struct BeatFlashDot: View {
+    var lastBeatTime: TimeInterval
+    var strength: CGFloat
+    var color: Color
+    var isActive: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive)) { timeline in
+            let age = max(0, BeatClock.time(for: timeline.date) - lastBeatTime)
+            let flash = isActive ? exp(-age / 0.15) * (0.4 + 0.6 * Double(strength)) : 0
+            Circle()
+                .fill(color.opacity(0.25 + 0.75 * flash))
+                .frame(width: 7, height: 7)
+                .scaleEffect(1 + 0.6 * flash)
+                .shadow(color: color.opacity(flash), radius: 6 * flash)
+        }
+        .frame(width: 12, height: 12)
     }
 }
 

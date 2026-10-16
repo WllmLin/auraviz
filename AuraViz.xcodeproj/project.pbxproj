@@ -10,6 +10,7 @@
 		48482A0EE0229659FD622C41 /* AuraVizApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F81F1FCEED4E31E218011AB /* AuraVizApp.swift */; };
 		E4BDEE02A3CF8CD2AF319231 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8D5F29C3004EC342374E3C2 /* ContentView.swift */; };
 		A896AF55648E7CF40430E782 /* AudioEngineManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80F7D93056DD1A88A3F62040 /* AudioEngineManager.swift */; };
+		17F47B0BF1A4A9D5B4B37632 /* BeatTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBD1898455671DEBBAAD7D35 /* BeatTracker.swift */; };
 		06D80B6A105D9A5C1E08D49C /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAC42FAF43D099EEBA2F14C /* Theme.swift */; };
 		83692270C99B549ED65DEE41 /* CircularVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118B45428EB008034E36B082 /* CircularVisualizerView.swift */; };
 		1280A0ED594D5A3921C07B93 /* WaveVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */; };
@@ -21,6 +22,7 @@
 		8F81F1FCEED4E31E218011AB /* AuraVizApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuraVizApp.swift; sourceTree = "<group>"; };
 		C8D5F29C3004EC342374E3C2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		80F7D93056DD1A88A3F62040 /* AudioEngineManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioEngineManager.swift; sourceTree = "<group>"; };
+		BBD1898455671DEBBAAD7D35 /* BeatTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BeatTracker.swift; sourceTree = "<group>"; };
 		CBAC42FAF43D099EEBA2F14C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		118B45428EB008034E36B082 /* CircularVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularVisualizerView.swift; sourceTree = "<group>"; };
 		FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveVisualizerView.swift; sourceTree = "<group>"; };
@@ -63,6 +65,7 @@
 				8F81F1FCEED4E31E218011AB /* AuraVizApp.swift */,
 				C8D5F29C3004EC342374E3C2 /* ContentView.swift */,
 				80F7D93056DD1A88A3F62040 /* AudioEngineManager.swift */,
+				BBD1898455671DEBBAAD7D35 /* BeatTracker.swift */,
 				CBAC42FAF43D099EEBA2F14C /* Theme.swift */,
 				1997AF537277371E7A961FB5 /* Visualizers */,
 				1D18080090E4D43AE61FED35 /* Assets.xcassets */,
@@ -153,6 +156,7 @@
 				48482A0EE0229659FD622C41 /* AuraVizApp.swift in Sources */,
 				E4BDEE02A3CF8CD2AF319231 /* ContentView.swift in Sources */,
 				A896AF55648E7CF40430E782 /* AudioEngineManager.swift in Sources */,
+				17F47B0BF1A4A9D5B4B37632 /* BeatTracker.swift in Sources */,
 				06D80B6A105D9A5C1E08D49C /* Theme.swift in Sources */,
 				83692270C99B549ED65DEE41 /* CircularVisualizerView.swift in Sources */,
 				1280A0ED594D5A3921C07B93 /* WaveVisualizerView.swift in Sources */,
