@@ -15,12 +15,16 @@ struct CircularVisualizerView: View {
                 let w = size.width
                 let h = size.height
                 let center = CGPoint(x: w/2, y: h/2)
-                let baseRadius = min(w, h) * 0.22
+                // Fit the whole composition (core + bars + orbit + ticks) inside
+                // the smaller dimension so the circle is never clipped top/bottom.
+                let available = min(w, h) / 2 - 18
+                guard available > 40 else { return }
+                let baseRadius = available * 0.32
                 let pulse = 1.0 + Double(volume) * 0.35 + sin(t*2.2)*0.04
                 let radius = baseRadius * pulse
 
                 // soft glow behind
-                let glowRadius = radius * 2.8
+                let glowRadius = min(radius * 2.2, available * 1.05)
                 let glowGradient = Gradient(colors: theme.gradient.map { $0.opacity(0.35) } + [Color.clear])
                 let glowRect = CGRect(x: center.x - glowRadius, y: center.y - glowRadius, width: glowRadius*2, height: glowRadius*2)
                 context.fill(Path(ellipseIn: glowRect), with: .radialGradient(glowGradient, center: center, startRadius: radius, endRadius: glowRadius))
@@ -43,12 +47,14 @@ struct CircularVisualizerView: View {
 
                 // radial bars
                 let count = 72
-                let barMax = min(w,h) * 0.28
+                let barMax = available * 0.42
                 for i in 0..<count {
                     let angle = (Double(i)/Double(count) * 2 * .pi) - .pi/2 + t*0.18 // slow rotation
                     let amp = circularAmplitude(at: i, barCount: count)
-                    let len = barMax * Double(amp) * sensitivity * 0.95 + 8
                     let innerR = radius + 6
+                    // Clamp so high sensitivity saturates instead of clipping.
+                    let maxLen = max(8, available - innerR - 12)
+                    let len = min(barMax * Double(amp) * sensitivity * 0.95 + 6, maxLen)
                     let outerR = innerR + len
                     let x1 = center.x + cos(angle) * innerR
                     let y1 = center.y + sin(angle) * innerR
@@ -75,8 +81,8 @@ struct CircularVisualizerView: View {
                     context.fill(Path(ellipseIn: tipRect.insetBy(dx: -2, dy: -2)), with: .color(col.opacity(0.35)))
                 }
 
-                // outer thin orbit ring
-                let orbitR = radius + barMax + 14
+                // outer thin orbit ring — pinned just inside the view edge
+                let orbitR = available - 8
                 let orbitPath = Path(ellipseIn: CGRect(x: center.x - orbitR, y: center.y - orbitR, width: orbitR*2, height: orbitR*2))
                 context.stroke(orbitPath, with: .color(.white.opacity(0.08)), lineWidth: 0.8)
                 // ticks
@@ -84,7 +90,7 @@ struct CircularVisualizerView: View {
                     if i % 6 != 0 { continue }
                     let angle = Double(i)/Double(count) * 2 * Double.pi - Double.pi/2
                     let r1 = orbitR + 2
-                    let r2 = orbitR + 6 + Double(volume)*4
+                    let r2 = orbitR + 4 + Double(volume)*2
                     let x1 = center.x + cos(angle)*r1
                     let y1 = center.y + sin(angle)*r1
                     let x2 = center.x + cos(angle)*r2
