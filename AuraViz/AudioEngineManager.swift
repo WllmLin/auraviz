@@ -4,6 +4,7 @@ import Accelerate
 import Combine
 import CoreGraphics
 import CoreMedia
+import os
 import ScreenCaptureKit
 
 enum InputMode: String, CaseIterable, Identifiable {
@@ -19,6 +20,24 @@ private struct AudioVisualizationFrame {
     var volume: CGFloat = 0
     var dominantFrequency: Double = 0
     var beat = BeatAnalysis()
+}
+
+/// The newest analysis waiting for the main thread. The audio queue overwrites
+/// it in place, so a busy main thread never builds up a backlog of frames.
+private struct PendingVisualization {
+    var frame = AudioVisualizationFrame()
+    var publishScheduled = false
+    var lastPublishTime: TimeInterval = -.infinity
+    #if DEBUG
+    var publishCount = 0
+    #endif
+
+    /// Returns the delay before the next publish, or nil if one is already queued.
+    mutating func reservePublish(now: TimeInterval, minimumInterval: TimeInterval) -> TimeInterval? {
+        guard !publishScheduled else { return nil }
+        publishScheduled = true
+        return max(0, lastPublishTime + minimumInterval - now)
+    }
 }
 
 final class AudioEngineManager: NSObject, ObservableObject {
@@ -70,7 +89,11 @@ final class AudioEngineManager: NSObject, ObservableObject {
     )
 
     private let fftSize = 4096
-    private let fftHopSize = 2048
+    private let fftHopSize = 512
+    // Spectrum smoothing coefficients were tuned for one step per 1024 samples.
+    // Scaling the exponent by hop / 1024 keeps attack and release times in
+    // seconds independent of the hop size.
+    private let smoothingReferenceHopSize = 1024
     private let log2n: vDSP_Length = 12 // 2^12 = 4096
     private var fftSetup: FFTSetup?
     private var window: [Float] = []
@@ -95,6 +118,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private var fftMagnitudes = [Float](repeating: 0, count: 2048)
     private var fftBands = [Float](repeating: 0, count: 64)
     private var spreadBands = [Float](repeating: 0, count: 64)
+    private var waveformScratch = [CGFloat](repeating: 0, count: 256)
     private var cachedBandSampleRate: Double = 0
     private var bandBinRanges: [(low: Int, high: Int)] = []
     private var lowestDominantBin = 1
@@ -103,8 +127,29 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private var highestBassBin = 1
     private let beatTracker = BeatTracker()
 
+    // Analysis runs at ~94 Hz; SwiftUI only needs display rate. The audio queue
+    // writes into preallocated pending storage and at most one main-thread
+    // publish is queued at a time.
+    private let minimumPublishInterval: TimeInterval = 1.0 / 60
+    private let pendingVisualization = OSAllocatedUnfairLock(uncheckedState: PendingVisualization())
+    // Created once so scheduling a publish does not allocate a new block.
+    private var publishBlock: @convention(block) () -> Void = {}
+
+    #if DEBUG
+    private static let analysisLogger = Logger(subsystem: "com.auraviz.app", category: "AudioAnalysis")
+    private let debugStatsInterval: TimeInterval = 2
+    private var debugStatsStartTime: TimeInterval = 0
+    private var debugProcessCount = 0
+    private var debugProcessNanoseconds: UInt64 = 0
+    private var debugMaxProcessNanoseconds: UInt64 = 0
+    private var debugStatsStartPublishCount = 0
+    #endif
+
     override init() {
         super.init()
+        publishBlock = { [weak self] in
+            self?.publishPendingVisualization()
+        }
         setupFFT()
         updateWindow()
         checkPermissions()
@@ -174,9 +219,13 @@ final class AudioEngineManager: NSObject, ObservableObject {
         audioProcessingQueue.async { [weak self] in
             guard let self else { return }
             let beat = self.beatTracker.tap(at: tapTime)
-            DispatchQueue.main.async { [weak self] in
-                self?.visualization.beat.bpm = beat.bpm
-                self?.visualization.beat.clock = beat.clock
+            let publishDelay = self.pendingVisualization.withLockUnchecked { state in
+                state.frame.beat.bpm = beat.bpm
+                state.frame.beat.clock = beat.clock
+                return state.reservePublish(now: BeatClock.now, minimumInterval: self.minimumPublishInterval)
+            }
+            if let publishDelay {
+                self.schedulePublish(after: publishDelay)
             }
         }
     }
@@ -517,7 +566,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         processSamples(
             analysisFrame,
             sampleRate: sampleRate,
-            smoothingFrameMultiplier: 2,
+            smoothingFrameMultiplier: Float(fftHopSize) / Float(smoothingReferenceHopSize),
             advancedSampleCount: advancedSampleCount
         )
     }
@@ -580,6 +629,11 @@ final class AudioEngineManager: NSObject, ObservableObject {
         smoothingFrameMultiplier: Float = 1,
         advancedSampleCount: Int? = nil
     ) {
+        #if DEBUG
+        let processStartTime = DispatchTime.now().uptimeNanoseconds
+        defer { recordProcessingTime(since: processStartTime) }
+        #endif
+
         let frameCount = samples.count
         guard frameCount > 0, sampleRate > 0 else { return }
         let copyCount = min(frameCount, fftSize)
@@ -680,18 +734,17 @@ final class AudioEngineManager: NSObject, ObservableObject {
             let baseAlpha = target > current
                 ? min(0.55, currentSmoothing * 0.55)
                 : min(0.96, 0.55 + currentSmoothing * 0.43)
-            // System audio now analyzes half as often, so applying two old
-            // smoothing steps at once keeps the response time unchanged.
+            // The multiplier scales each step to the samples it covers, so the
+            // response time in seconds does not depend on the analysis rate.
             let alpha = pow(baseAlpha, smoothingFrameMultiplier)
             smoothedSpectrum[index] = current * alpha + target * (1 - alpha)
         }
 
-        var visualWaveform = [CGFloat](repeating: 0, count: 256)
         let waveformStep = Double(copyCount) / 256
         for index in 0..<256 {
             let sampleIndex = min(copyCount - 1, Int(Double(index) * waveformStep))
             let value = (samples[sampleIndex] - mean) * currentSensitivity * 2.5
-            visualWaveform[index] = CGFloat(min(1, max(-1, value)))
+            waveformScratch[index] = CGFloat(min(1, max(-1, value)))
         }
 
         var dominantBin = lowestDominantBin
@@ -704,18 +757,100 @@ final class AudioEngineManager: NSObject, ObservableObject {
         let frequency = fftMagnitudes[dominantBin] > 0.000_001
             ? Double(dominantBin) * binWidth
             : 0
-        let visualSpectrum = smoothedSpectrum.map { CGFloat($0) }
 
-        DispatchQueue.main.async { [weak self] in
-            self?.visualization = AudioVisualizationFrame(
-                spectrum: visualSpectrum,
-                waveform: visualWaveform,
-                volume: visualVolume,
-                dominantFrequency: frequency,
-                beat: beat
-            )
+        storeLatestFrame(volume: visualVolume, dominantFrequency: frequency, beat: beat)
+    }
+
+    // MARK: - Publishing
+
+    /// Replaces the pending frame and queues a main-thread publish if none is
+    /// waiting. Runs on the audio queue and does not allocate.
+    private func storeLatestFrame(volume: CGFloat, dominantFrequency: Double, beat: BeatAnalysis) {
+        let publishDelay = pendingVisualization.withLockUnchecked { state in
+            for index in 0..<64 {
+                state.frame.spectrum[index] = CGFloat(smoothedSpectrum[index])
+            }
+            state.frame.waveform.withUnsafeMutableBufferPointer { destination in
+                waveformScratch.withUnsafeBufferPointer { source in
+                    destination.baseAddress!.update(from: source.baseAddress!, count: 256)
+                }
+            }
+            state.frame.volume = volume
+            state.frame.dominantFrequency = dominantFrequency
+            // Frames that never reach the screen must not swallow a beat.
+            let unpublishedBeat = state.frame.beat.isBeat
+            let unpublishedFlux = state.frame.beat.onsetFlux
+            state.frame.beat = beat
+            state.frame.beat.isBeat = beat.isBeat || unpublishedBeat
+            state.frame.beat.onsetFlux = max(beat.onsetFlux, unpublishedFlux)
+            return state.reservePublish(now: BeatClock.now, minimumInterval: minimumPublishInterval)
+        }
+        if let publishDelay {
+            schedulePublish(after: publishDelay)
         }
     }
+
+    private func schedulePublish(after delay: TimeInterval) {
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: publishBlock)
+        } else {
+            DispatchQueue.main.async(execute: publishBlock)
+        }
+    }
+
+    private func publishPendingVisualization() {
+        let frame = pendingVisualization.withLockUnchecked { state in
+            // Copy into fresh storage so the audio queue keeps sole ownership of
+            // the pending arrays and never triggers a copy-on-write.
+            var frame = state.frame
+            frame.spectrum = state.frame.spectrum.withUnsafeBufferPointer { Array($0) }
+            frame.waveform = state.frame.waveform.withUnsafeBufferPointer { Array($0) }
+            state.frame.beat.isBeat = false
+            state.frame.beat.onsetFlux = 0
+            state.publishScheduled = false
+            state.lastPublishTime = BeatClock.now
+            #if DEBUG
+            state.publishCount += 1
+            #endif
+            return frame
+        }
+        visualization = frame
+    }
+
+    #if DEBUG
+    /// Logs the average processSamples() cost and the analysis and publish rates
+    /// every couple of seconds. View with Xcode's console or
+    /// `log stream --predicate 'subsystem == "com.auraviz.app"'`.
+    private func recordProcessingTime(since startTime: UInt64) {
+        let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - startTime
+        debugProcessCount += 1
+        debugProcessNanoseconds += elapsedNanoseconds
+        debugMaxProcessNanoseconds = max(debugMaxProcessNanoseconds, elapsedNanoseconds)
+
+        let now = BeatClock.now
+        let windowDuration = now - debugStatsStartTime
+        guard windowDuration >= debugStatsInterval else { return }
+
+        let publishCount = pendingVisualization.withLockUnchecked { $0.publishCount }
+        // Skip the first window and any window that spans a capture pause.
+        if debugStatsStartTime > 0, windowDuration < debugStatsInterval * 2 {
+            let averageMicroseconds = Double(debugProcessNanoseconds) / Double(debugProcessCount) / 1_000
+            let maximumMicroseconds = Double(debugMaxProcessNanoseconds) / 1_000
+            let analysisRate = Double(debugProcessCount) / windowDuration
+            let publishRate = Double(publishCount - debugStatsStartPublishCount) / windowDuration
+            let coreLoad = Double(debugProcessNanoseconds) / 1_000_000_000 / windowDuration * 100
+            Self.analysisLogger.notice(
+                "processSamples avg \(averageMicroseconds, format: .fixed(precision: 1), privacy: .public) µs, max \(maximumMicroseconds, format: .fixed(precision: 1), privacy: .public) µs, \(analysisRate, format: .fixed(precision: 1), privacy: .public) analyses/s (\(coreLoad, format: .fixed(precision: 2), privacy: .public)% of a core), published \(publishRate, format: .fixed(precision: 1), privacy: .public) frames/s"
+            )
+        }
+
+        debugStatsStartTime = now
+        debugStatsStartPublishCount = publishCount
+        debugProcessCount = 0
+        debugProcessNanoseconds = 0
+        debugMaxProcessNanoseconds = 0
+    }
+    #endif
 
     private func prepareFrequencyBands(sampleRate: Double) {
         guard sampleRate != cachedBandSampleRate else { return }

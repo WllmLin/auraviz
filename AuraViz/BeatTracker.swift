@@ -28,8 +28,9 @@ struct BeatClock {
 }
 
 struct BeatAnalysis {
-    /// True only on the analysis frame that detected the beat. Views that render
-    /// faster than analysis should watch `beatCount` / `lastBeatTime` instead.
+    /// True on the published frame that includes a beat detection (frames are
+    /// coalesced to display rate). Views that animate between published frames
+    /// should watch `beatCount` / `lastBeatTime` instead.
     var isBeat = false
     var beatCount = 0
     var lastBeatTime: TimeInterval = -.infinity
@@ -61,10 +62,15 @@ final class BeatTracker {
     private let minimumBassLevel: Float = 0.05
     private let refractoryInterval: TimeInterval = 0.25
     private let fluxScale: Float = 5
+    // Short hops catch a kick while it is still entering the FFT window, so the
+    // strength keeps tracking the rising energy for about one window length.
+    private let strengthPeakWindow: TimeInterval = 0.1
 
-    private let energyCapacity = 128
-    private var energyHistory = [Float](repeating: 0, count: 128)
-    private var energyTimes = [TimeInterval](repeating: 0, count: 128)
+    // Must hold `energyHistoryDuration` at the fastest analysis rate
+    // (512-sample hops at 48 kHz are ~94 analyses per second).
+    private let energyCapacity = 256
+    private var energyHistory = [Float](repeating: 0, count: 256)
+    private var energyTimes = [TimeInterval](repeating: 0, count: 256)
     private var energyWriteIndex = 0
     private var energyCount = 0
     private var previousEnergy: Float = 0
@@ -74,6 +80,7 @@ final class BeatTracker {
     private var lastAnalysisTime: TimeInterval = 0
     private var lastBeatTime: TimeInterval = -.infinity
     private var lastBeatStrength: Float = 0
+    private var onsetBaselineEnergy: Float = 0
     private var beatCount = 0
 
     // Tempo: pairwise onset intervals vote into a one-octave log histogram
@@ -208,10 +215,19 @@ final class BeatTracker {
                bassLevel > minimumBassLevel,
                now - lastBeatTime >= refractoryInterval {
                 isBeat = true
-                let ratio = bassEnergy / max(mean, Float.leastNormalMagnitude)
-                lastBeatStrength = min(1, max(0.1, log2(ratio) / 2))
+                onsetBaselineEnergy = max(mean, Float.leastNormalMagnitude)
+                lastBeatStrength = onsetStrength(forEnergy: bassEnergy)
                 lastBeatTime = now
                 beatCount += 1
+            }
+        }
+        let timeSinceBeat = now - lastBeatTime
+        if !isBeat, onsetCount > 0, timeSinceBeat >= 0, timeSinceBeat < strengthPeakWindow,
+           bassEnergy > previousEnergy {
+            let strength = onsetStrength(forEnergy: bassEnergy)
+            if strength > lastBeatStrength {
+                lastBeatStrength = strength
+                onsetStrengths[onsetIndex(0)] = strength
             }
         }
 
@@ -476,6 +492,11 @@ final class BeatTracker {
     }
 
     // MARK: - Helpers
+
+    /// Measured against the energy history from before the onset.
+    private func onsetStrength(forEnergy energy: Float) -> Float {
+        min(1, max(0.1, log2(energy / onsetBaselineEnergy) / 2))
+    }
 
     private func audioTime(
         advancedSampleCount: Int,

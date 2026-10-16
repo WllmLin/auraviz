@@ -7,10 +7,13 @@ SRC="$PROJECT_DIR/AuraViz"
 PLUGIN=/Applications/Xcode_27.0.0_27A5237l_fb.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins
 LIBS=""
 for lib in $PLUGIN/*.dylib; do LIBS="$LIBS -load-plugin-library $lib"; done
+# AURAVIZ_DEBUG=1 ./build.sh compiles DEBUG-only diagnostics (audio analysis timing logs).
+DEFINES=""
+if [ "${AURAVIZ_DEBUG:-0}" = "1" ]; then DEFINES="-D DEBUG"; fi
 echo "▸ Compiling AuraViz (arm64, macOS 14)…"
 mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS"
 mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources"
-$TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $LIBS \
+$TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $DEFINES $LIBS \
   -o "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS/AuraViz" \
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/BeatTracker.swift" "$SRC/Theme.swift" \
   "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift"
