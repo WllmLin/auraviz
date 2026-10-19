@@ -17,7 +17,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Both live inputs use a 4096-point FFT via `Accelerate/vDSP`, a 64-band log-spaced spectrum, RMS volume, waveform samples, and dominant-frequency detection.
 
 - **Controls**
-  - Sensitivity (0.3–2.2×) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
+  - Auto Gain (on by default; **AGC** badge in the HUD) + Sensitivity (0.3–2.2×, a trim on top of Auto Gain while it is on) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
 
@@ -75,6 +75,7 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 ## Audio details
 
 - **System audio:** `ScreenCaptureKit` provides 48 kHz stereo PCM from apps playing through the Mac. The channels are mixed to mono for analysis, accumulated into overlapping 4096-sample windows, then transformed into waveform, level, frequency, and spectrum values.
+- **Auto gain:** a peak-biased follower (≈0.15 s rise, ≈9 s fall) tracks the RMS level and the band energy and normalizes volume, waveform and spectrum against them (up to +30 dB boost / −18 dB cut), so quiet laptop sources and loud club feeds fill the same visual range. Below a −60 dBFS noise floor, or 40 dB under the tracked peak, the gain fades back to 0 dB and the reference holds, so silence and hiss stay dark and the next track starts at the previous level. With Auto Gain off the analysis is unchanged.
 - **Analysis:** Hann window, real FFT, logarithmic 35 Hz–16 kHz bands, decibel compression, sensitivity, and fast-attack/exponential-release smoothing. System audio uses 50% overlap (about 23 updates/second at 48 kHz), while fixed ring/work buffers avoid allocations and array shifts in the hot path.
 
 ## Performance

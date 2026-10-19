@@ -95,6 +95,9 @@ struct ContentView: View {
                 HStack {
                     liveBadge
                     tempoButton
+                    if audio.autoGainEnabled {
+                        autoGainBadge
+                    }
                     Spacer()
                     if selectedMode == .circle {
                         fpsButton
@@ -225,6 +228,9 @@ struct ContentView: View {
                 HStack {
                     liveBadge
                     tempoButton
+                    if audio.autoGainEnabled {
+                        autoGainBadge
+                    }
                     Spacer()
                     if selectedMode == .circle {
                         fpsButton
@@ -323,6 +329,20 @@ struct ContentView: View {
         .accessibilityLabel("Tempo")
         .accessibilityValue(audio.bpm > 0 ? String(format: "%.0f beats per minute", audio.bpm) : "Detecting")
         .accessibilityHint("Tap on each beat to set the tempo")
+    }
+
+    private var autoGainBadge: some View {
+        Text("AGC")
+            .font(.system(size: 10, weight: .black, design: .monospaced))
+            .tracking(1)
+            .foregroundStyle(.white.opacity(audio.isRunning ? 0.85 : 0.45))
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(.black.opacity(0.45), in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+            .help(String(format: "Auto gain is on (%+.0f dB). Sensitivity is a trim on top.", audio.autoGainDB))
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Auto gain on")
+            .accessibilityValue(String(format: "%+.0f decibels", audio.autoGainDB))
     }
 
     private var fpsButton: some View {
@@ -426,12 +446,19 @@ struct ContentView: View {
                 GridRow {
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {
-                            Label("Sensitivity", systemImage: "eye.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                            Label(audio.autoGainEnabled ? "Trim" : "Sensitivity", systemImage: "eye.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                            Toggle(isOn: $audio.autoGainEnabled) {
+                                Text("Auto Gain").font(.system(size: 10, weight: .bold, design: .rounded))
+                            }
+                            .toggleStyle(.button)
+                            .controlSize(.mini)
+                            .help("Automatic gain control: adapts to quiet and loud sources so both fill the visuals")
                             Spacer()
                             Text(String(format: "%.1fx", audio.sensitivity)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
                         }
                         Slider(value: $audio.sensitivity, in: 0.3...2.2)
                             .tint(.orange)
+                            .help(audio.autoGainEnabled ? "Trim on top of auto gain; 1.0x is neutral" : "Input sensitivity")
                     }
                     VStack(alignment: .leading, spacing: 5) {
                         HStack {

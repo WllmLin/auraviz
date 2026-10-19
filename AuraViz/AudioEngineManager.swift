@@ -19,7 +19,97 @@ private struct AudioVisualizationFrame {
     var waveform: [CGFloat] = Array(repeating: 0, count: 256)
     var volume: CGFloat = 0
     var dominantFrequency: Double = 0
+    var autoGainDB: Double = 0
     var beat = BeatAnalysis()
+}
+
+/// Slow automatic gain control. Follows a peak-biased level of the broadband
+/// RMS and of the band energy (fast rise, slow fall) and returns the gain that
+/// brings each to a fixed target, so quiet and loud sources fill the same
+/// visual range. Used only from the audio processing queue.
+private struct AutoGainControl {
+    // An exponential follower with these time constants settles near the top
+    // few percent of the level distribution rather than on single transients.
+    private static let attackTime: Float = 0.15
+    private static let releaseTime: Float = 9
+    // Targets put loud program material about where it sat at sensitivity
+    // 1.0 without AGC (RMS peaks near -12 dBFS, band energy near -20 dB).
+    private static let volumeTargetDB: Float = -12
+    private static let spectrumTargetDB: Float = -20
+    private static let maximumBoostDB: Float = 30
+    private static let maximumCutDB: Float = 18
+    // Below the noise floor the gain fades back to 0 dB, so hiss and room noise
+    // look as quiet as they do without AGC. Levels far below the tracked peak
+    // also count as a pause between tracks.
+    private static let noiseFloorDB: Float = -60
+    private static let relativeFloorDB: Float = 40
+    private static let gateRangeDB: Float = 10
+    private static let presenceAttackTime: Float = 0.03
+    private static let presenceReleaseTime: Float = 0.3
+
+    private var volumeReferenceDB: Float?
+    private var spectrumReferenceDB: Float?
+    private var presenceLevelDB: Float = -120
+    private(set) var volumeGainDB: Float = 0
+    private(set) var spectrumGainDB: Float = 0
+
+    mutating func reset() {
+        self = AutoGainControl()
+    }
+
+    /// - Parameters:
+    ///   - rmsDB: Unscaled RMS of the analysis window, in dBFS.
+    ///   - bandEnergyDB: Mean band power, including the display's frequency
+    ///     compensation, in dB.
+    ///   - duration: Seconds of new audio since the previous update.
+    mutating func update(rmsDB: Float, bandEnergyDB: Float, duration: Float) {
+        let presenceTime = rmsDB > presenceLevelDB ? Self.presenceAttackTime : Self.presenceReleaseTime
+        presenceLevelDB += (rmsDB - presenceLevelDB) * (1 - exp(-duration / presenceTime))
+        let floorDB = max(Self.noiseFloorDB, (volumeReferenceDB ?? -.infinity) - Self.relativeFloorDB)
+        let gatePosition = min(1, max(0, (presenceLevelDB - floorDB) / Self.gateRangeDB))
+        // Smoothstep, so levels just above the floor get only a little gain.
+        let presence = gatePosition * gatePosition * (3 - 2 * gatePosition)
+        // Fades never pull a reference below the level where the gate opens.
+        // The targets differ by the usual band-energy-to-RMS offset.
+        let openLevelDB = floorDB + Self.gateRangeDB
+
+        if let volumeReferenceDB, let spectrumReferenceDB {
+            self.volumeReferenceDB = Self.follow(
+                volumeReferenceDB, toward: max(rmsDB, openLevelDB),
+                target: Self.volumeTargetDB, duration: duration, presence: presence
+            )
+            self.spectrumReferenceDB = Self.follow(
+                spectrumReferenceDB,
+                toward: max(bandEnergyDB, openLevelDB + Self.spectrumTargetDB - Self.volumeTargetDB),
+                target: Self.spectrumTargetDB, duration: duration, presence: presence
+            )
+        } else if presence >= 1 {
+            // Start from the first clearly audible level instead of waiting a
+            // full release time to adapt to a quiet source.
+            volumeReferenceDB = Self.clampReference(presenceLevelDB, target: Self.volumeTargetDB)
+            spectrumReferenceDB = Self.clampReference(bandEnergyDB, target: Self.spectrumTargetDB)
+        }
+
+        volumeGainDB = (Self.volumeTargetDB - (volumeReferenceDB ?? Self.volumeTargetDB)) * presence
+        spectrumGainDB = (Self.spectrumTargetDB - (spectrumReferenceDB ?? Self.spectrumTargetDB)) * presence
+    }
+
+    private static func follow(
+        _ reference: Float,
+        toward level: Float,
+        target: Float,
+        duration: Float,
+        presence: Float
+    ) -> Float {
+        let time = level > reference ? attackTime : releaseTime
+        // Silence and noise must not drag the reference down between tracks.
+        let rate = level > reference ? 1 : presence
+        return clampReference(reference + (level - reference) * (1 - exp(-duration * rate / time)), target: target)
+    }
+
+    private static func clampReference(_ level: Float, target: Float) -> Float {
+        min(target + maximumCutDB, max(target - maximumBoostDB, level))
+    }
 }
 
 /// The newest analysis waiting for the main thread. The audio queue overwrites
@@ -53,6 +143,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     }
 
     @Published var sensitivity: Double = 1.0 // 0.3...2.2
+    /// Normalizes volume and spectrum against the recent source level. While
+    /// on, `sensitivity` acts as a trim on top of the automatic gain.
+    @Published var autoGainEnabled = true
     @Published var smoothing: Double = 0.75 // 0...0.92
     /// Scales every beat-synced visual effect; 0 = volume-only visuals.
     @Published var beatReactivity: Double = 0.6 // 0...1
@@ -63,6 +156,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
     var waveform: [CGFloat] { visualization.waveform }
     var volume: CGFloat { visualization.volume }
     var dominantFrequency: Double { visualization.dominantFrequency }
+    /// Volume gain currently applied by auto gain, excluding the trim; 0 when off.
+    var autoGainDB: Double { visualization.autoGainDB }
 
     // Beat and tempo. For display-rate animation, read the clock inside a
     // TimelineView: `beatClock.beatPhase(at: BeatClock.time(for: timeline.date))`.
@@ -129,6 +224,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private var lowestBassBin = 1
     private var highestBassBin = 1
     private let beatTracker = BeatTracker()
+    private var autoGain = AutoGainControl()
+    // Display frequency compensation as a power factor, for the AGC band energy.
+    private let bandCompensationPower: [Float] = (0..<64).map { pow(10, Float($0) / 63 * 9 / 10) }
 
     // Analysis runs at ~94 Hz; SwiftUI only needs display rate. The audio queue
     // writes into preallocated pending storage and at most one main-thread
@@ -189,6 +287,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         captureError = nil
         audioProcessingQueue.async { [weak self] in
             self?.beatTracker.resetSignalState()
+            self?.autoGain.reset()
         }
         switch inputMode {
         case .systemAudio:
@@ -643,13 +742,10 @@ final class AudioEngineManager: NSObject, ObservableObject {
         let copyCount = min(frameCount, fftSize)
         let currentSensitivity = Float(sensitivity)
         let currentSmoothing = Float(smoothing)
+        let autoGainActive = autoGainEnabled
 
         var rms: Float = 0
         vDSP_rmsqv(samples, 1, &rms, vDSP_Length(copyCount))
-        let adjustedRMS = max(rms * currentSensitivity, 0.000_001)
-        let rmsDB = 20 * log10(adjustedRMS)
-        let linearLevel = min(1, max(0, (rmsDB + 60) / 48))
-        let visualVolume = CGFloat(pow(linearLevel, 0.72))
 
         var mean: Float = 0
         vDSP_meanv(samples, 1, &mean, vDSP_Length(copyCount))
@@ -690,6 +786,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
         prepareFrequencyBands(sampleRate: sampleRate)
         guard bandBinRanges.count == fftBands.count else { return }
+        var bandEnergy: Float = 0
         for index in fftBands.indices {
             let range = bandBinRanges[index]
             var sumSquares: Float = 0
@@ -699,7 +796,32 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 peak = max(peak, fftMagnitudes[bin])
             }
             let bandRMS = sqrt(sumSquares / Float(range.high - range.low + 1))
-            let magnitude = max(0.000_001, (bandRMS * 0.45 + peak * 0.55) * currentSensitivity)
+            let bandMagnitude = bandRMS * 0.45 + peak * 0.55
+            fftBands[index] = bandMagnitude
+            bandEnergy += bandMagnitude * bandMagnitude * bandCompensationPower[index]
+        }
+
+        // AGC keeps adapting while off so switching it on takes effect at once.
+        // With it off both gains are exactly the sensitivity, as before.
+        autoGain.update(
+            rmsDB: 20 * log10(max(rms, 0.000_001)),
+            bandEnergyDB: 10 * log10(max(bandEnergy / Float(fftBands.count), 0.000_000_000_001)),
+            duration: Float(advancedSampleCount ?? frameCount) / Float(sampleRate)
+        )
+        var volumeGain = currentSensitivity
+        var spectrumGain = currentSensitivity
+        if autoGainActive {
+            volumeGain *= pow(10, autoGain.volumeGainDB / 20)
+            spectrumGain *= pow(10, autoGain.spectrumGainDB / 20)
+        }
+
+        let adjustedRMS = max(rms * volumeGain, 0.000_001)
+        let rmsDB = 20 * log10(adjustedRMS)
+        let linearLevel = min(1, max(0, (rmsDB + 60) / 48))
+        let visualVolume = CGFloat(pow(linearLevel, 0.72))
+
+        for index in fftBands.indices {
+            let magnitude = max(0.000_001, fftBands[index] * spectrumGain)
             let frequencyCompensation = Float(index) / 63 * 9
             let decibels = 20 * log10(magnitude) + frequencyCompensation
             let normalizedDB = min(1, max(0, (decibels + 72) / 54))
@@ -712,7 +834,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
             bassEnergy += fftMagnitudes[bin] * fftMagnitudes[bin]
         }
         let bassRMS = sqrt(bassEnergy / Float(highestBassBin - lowestBassBin + 1))
-        let bassDB = 20 * log10(max(0.000_001, bassRMS * currentSensitivity))
+        let bassDB = 20 * log10(max(0.000_001, bassRMS * spectrumGain))
         let bassLevel = min(1, max(0, (bassDB + 48) / 36))
         let beat = beatTracker.analyze(
             bassEnergy: bassEnergy,
@@ -747,7 +869,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         let waveformStep = Double(copyCount) / 256
         for index in 0..<256 {
             let sampleIndex = min(copyCount - 1, Int(Double(index) * waveformStep))
-            let value = (samples[sampleIndex] - mean) * currentSensitivity * 2.5
+            let value = (samples[sampleIndex] - mean) * volumeGain * 2.5
             waveformScratch[index] = CGFloat(min(1, max(-1, value)))
         }
 
@@ -762,14 +884,24 @@ final class AudioEngineManager: NSObject, ObservableObject {
             ? Double(dominantBin) * binWidth
             : 0
 
-        storeLatestFrame(volume: visualVolume, dominantFrequency: frequency, beat: beat)
+        storeLatestFrame(
+            volume: visualVolume,
+            dominantFrequency: frequency,
+            autoGainDB: autoGainActive ? Double(autoGain.volumeGainDB) : 0,
+            beat: beat
+        )
     }
 
     // MARK: - Publishing
 
     /// Replaces the pending frame and queues a main-thread publish if none is
     /// waiting. Runs on the audio queue and does not allocate.
-    private func storeLatestFrame(volume: CGFloat, dominantFrequency: Double, beat: BeatAnalysis) {
+    private func storeLatestFrame(
+        volume: CGFloat,
+        dominantFrequency: Double,
+        autoGainDB: Double,
+        beat: BeatAnalysis
+    ) {
         let publishDelay = pendingVisualization.withLockUnchecked { state in
             for index in 0..<64 {
                 state.frame.spectrum[index] = CGFloat(smoothedSpectrum[index])
@@ -781,6 +913,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
             }
             state.frame.volume = volume
             state.frame.dominantFrequency = dominantFrequency
+            state.frame.autoGainDB = autoGainDB
             // Frames that never reach the screen must not swallow a beat.
             let unpublishedBeat = state.frame.beat.isBeat
             let unpublishedFlux = state.frame.beat.onsetFlux
