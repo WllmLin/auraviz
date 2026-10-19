@@ -47,6 +47,60 @@ struct BeatAnalysis {
     func bassEnvelope(at time: TimeInterval) -> CGFloat {
         bassEnvelope * CGFloat(exp(-max(0, time - analysisTime) / BeatTracker.bassReleaseTime))
     }
+
+    /// Seconds since the last detected beat; infinite before the first one.
+    func beatAge(at time: TimeInterval) -> TimeInterval {
+        max(0, time - lastBeatTime)
+    }
+
+    /// Kick flash that decays over ~150 ms, scaled by how hard the beat hit.
+    func flash(at time: TimeInterval) -> Double {
+        exp(-beatAge(at: time) / 0.15) * (0.4 + 0.6 * Double(beatStrength))
+    }
+}
+
+/// An animation phase that crossfades between steady wall-clock motion and the
+/// beat grid. It is integrated frame to frame rather than blended from absolute
+/// values, so it stays continuous while the reactivity slider moves or the
+/// tempo changes. A class so it can advance inside a `TimelineView` update
+/// without invalidating SwiftUI state.
+final class BeatSyncedPhase {
+    private var value: Double?
+    private var lastTime: TimeInterval = 0
+    private var lastGridPhase: Double = 0
+
+    /// - Parameters:
+    ///   - time: Frame time in seconds. The phase starts at `time * wallRate`,
+    ///     so a reactivity of 0 reproduces plain `time * wallRate` motion.
+    ///   - wallRate: Phase per second at reactivity 0.
+    ///   - gridPhase: Beat or bar phase at `time`.
+    ///   - gridRate: Phase per unit of `gridPhase` at reactivity 1.
+    ///   - nominalGridSpeed: Expected `gridPhase` units per second. Caps
+    ///     forward jumps, such as a tap re-aligning the downbeat, so the
+    ///     motion glides instead of snapping.
+    func advance(
+        to time: TimeInterval,
+        wallRate: Double,
+        gridPhase: Double,
+        gridRate: Double,
+        nominalGridSpeed: Double,
+        reactivity: Double
+    ) -> Double {
+        defer {
+            lastTime = time
+            lastGridPhase = gridPhase
+        }
+        guard let current = value else {
+            value = time * wallRate
+            return time * wallRate
+        }
+        // Clamped so resuming after a pause continues instead of jumping.
+        let dt = min(0.25, max(0, time - lastTime))
+        let gridStep = min(max(0, gridPhase - lastGridPhase), dt * nominalGridSpeed * 3)
+        let next = current + (1 - reactivity) * wallRate * dt + reactivity * gridRate * gridStep
+        value = next
+        return next
+    }
 }
 
 /// Low-band onset detection, inter-onset-interval tempo estimation and a

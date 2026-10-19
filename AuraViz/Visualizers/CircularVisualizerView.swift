@@ -7,18 +7,31 @@ struct CircularVisualizerView: View {
     var sensitivity: Double
     var framesPerSecond: Int = 30
     var isActive: Bool = true
-    var lastBeatTime: TimeInterval = -.infinity
-    var beatStrength: CGFloat = 0
-    var beatClock = BeatClock()
+    var beat = BeatAnalysis()
+    /// 0 keeps the volume-only look; 1 applies the full beat effects.
+    var beatReactivity: Double = 0
+
+    @State private var barRotation = BeatSyncedPhase()
 
     var body: some View {
         let palette = NeonPalette(theme: theme)
         TimelineView(.animation(minimumInterval: 1.0 / Double(max(1, framesPerSecond)), paused: !isActive)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             let now = BeatClock.time(for: timeline.date)
-            let beatAge = max(0, now - lastBeatTime)
-            let flash = beatFlash(age: beatAge)
-            let beatPhase = beatClock.beatPhase(at: now)
+            let beatAge = beat.beatAge(at: now)
+            let flash = beatFlash(at: now)
+            let beatPhase = beat.clock.beatPhase(at: now)
+            // One full turn per 4 bars at full reactivity.
+            let rotation = barRotation.advance(
+                to: t,
+                wallRate: 0.18,
+                gridPhase: beat.clock.barPhase(at: now),
+                gridRate: .pi / 2,
+                nominalGridSpeed: beat.clock.beatsPerSecond / 4,
+                reactivity: beatReactivity
+            )
+            let punch = beatPunch(age: beatAge)
+            let glowBoost = beatGlow(at: now, age: beatAge)
             Canvas { context, size in
                 let w = size.width
                 let h = size.height
@@ -30,22 +43,22 @@ struct CircularVisualizerView: View {
                 let baseRadius = available * 0.38
                 // Kick-driven breathing; a gentler volume swell keeps the
                 // detailed core readable instead of constantly resizing.
-                let pulse = 1.0 + Double(volume) * 0.18 + flash * 0.06 + sin(t*2.2)*0.015
+                let pulse = 1.0 + Double(volume) * 0.18 + flash * 0.06 + punch + sin(t*2.2)*0.015
                 let radius = baseRadius * pulse
 
                 // soft glow behind
                 let glowRadius = min(radius * 2.2, available * 1.05)
-                let glowGradient = Gradient(colors: theme.gradient.map { $0.opacity(0.35) } + [Color.clear])
+                let glowGradient = Gradient(colors: theme.gradient.map { $0.opacity(0.35 + 0.3 * glowBoost) } + [Color.clear])
                 let glowRect = CGRect(x: center.x - glowRadius, y: center.y - glowRadius, width: glowRadius*2, height: glowRadius*2)
                 context.fill(Path(ellipseIn: glowRect), with: .radialGradient(glowGradient, center: center, startRadius: radius, endRadius: glowRadius))
 
-                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, time: t, beatPhase: beatPhase, beatAge: beatAge, flash: flash, palette: palette)
+                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, time: t, beatPhase: beatPhase, beatAge: beatAge, flash: flash, glowBoost: glowBoost, palette: palette)
 
                 // radial bars
                 let count = 72
                 let barMax = available * 0.42
                 for i in 0..<count {
-                    let angle = (Double(i)/Double(count) * 2 * .pi) - .pi/2 + t*0.18 // slow rotation
+                    let angle = (Double(i)/Double(count) * 2 * .pi) - .pi/2 + rotation
                     let amp = circularAmplitude(at: i, barCount: count)
                     let innerR = radius + 6
                     // Clamp so high sensitivity saturates instead of clipping.
@@ -103,16 +116,28 @@ struct CircularVisualizerView: View {
         .background(Color.clear)
     }
 
-    /// Kick flash that decays over ~150 ms, scaled by how hard the beat hit.
-    private func beatFlash(age: TimeInterval) -> Double {
+    private func beatFlash(at time: TimeInterval) -> Double {
+        isActive ? beat.flash(at: time) : 0
+    }
+
+    /// Radius punch on each beat: up to +8% at full reactivity, easing back
+    /// out over ~150 ms.
+    private func beatPunch(age: TimeInterval) -> Double {
+        guard isActive, age < 0.15 else { return 0 }
+        let p = age / 0.15
+        return beatReactivity * 0.08 * (0.6 + 0.4 * Double(beat.beatStrength)) * (1 - p) * (1 - p)
+    }
+
+    /// Brief glow boost after each beat, as bright as the bass hit.
+    private func beatGlow(at time: TimeInterval, age: TimeInterval) -> Double {
         guard isActive else { return 0 }
-        return exp(-age / 0.15) * (0.4 + 0.6 * Double(beatStrength))
+        return beatReactivity * Double(beat.bassEnvelope(at: time)) * exp(-age / 0.2)
     }
 
     /// LED-tunnel core: tempo-synced rings flowing out of a bright eye, a
     /// spectrum-driven dot meter, a segmented LED ring and a white-hot neon rim
     /// that flares on every kick.
-    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, time t: Double, beatPhase: Double, beatAge: Double, flash: Double, palette: NeonPalette) {
+    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, time t: Double, beatPhase: Double, beatAge: Double, flash: Double, glowBoost: Double, palette: NeonPalette) {
         func circle(_ r: Double) -> Path {
             Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r*2, height: r*2))
         }
@@ -146,7 +171,7 @@ struct CircularVisualizerView: View {
         if isActive && beatAge < shockDuration {
             let p = beatAge / shockDuration
             let r = radius * (0.10 + 0.86 * (1 - pow(1 - p, 3)))
-            glow.stroke(circle(r), with: .color(palette.rim.opacity((1 - p) * (0.25 + 0.5 * Double(beatStrength)))), lineWidth: 1 + 3 * (1 - p))
+            glow.stroke(circle(r), with: .color(palette.rim.opacity((1 - p) * (0.25 + 0.5 * Double(beat.beatStrength)))), lineWidth: 1 + 3 * (1 - p))
         }
 
         // dot meter — three rows per column light up from the inside out with
@@ -202,7 +227,7 @@ struct CircularVisualizerView: View {
 
         // neon rim — stacked strokes fake a bloom around a white-hot line
         let rimPath = circle(radius * 0.97)
-        let intensity = 0.55 + 0.3 * energy + 0.45 * flash
+        let intensity = 0.55 + 0.3 * energy + 0.45 * flash + 0.6 * glowBoost
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.10 * intensity)), lineWidth: radius * 0.22)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.22 * intensity)), lineWidth: radius * 0.10)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.55 * intensity)), lineWidth: radius * 0.04)

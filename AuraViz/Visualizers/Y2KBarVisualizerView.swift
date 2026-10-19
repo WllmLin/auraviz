@@ -5,17 +5,25 @@ struct Y2KBarVisualizerView: View {
     var volume: CGFloat
     var theme: ColorTheme
     var sensitivity: Double
+    var isActive: Bool = true
+    var beat = BeatAnalysis()
+    /// 0 keeps the volume-only look; 1 applies the full beat effects.
+    var beatReactivity: Double = 0
 
     var barCount: Int { 32 }
 
     var body: some View {
-        Canvas { context, size in
-            draw(in: context, size: size)
+        // Ticks only to fade the beat flash; spectrum updates redraw on their own.
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive || beatReactivity <= 0)) { timeline in
+            let flash = isActive ? beatReactivity * beat.flash(at: BeatClock.time(for: timeline.date)) : 0
+            Canvas { context, size in
+                draw(in: context, size: size, flash: flash)
+            }
         }
         .background(Color.clear)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize) {
+    private func draw(in context: GraphicsContext, size: CGSize, flash: Double) {
         let w = size.width
         let h = size.height
         let topPadding: CGFloat = 18
@@ -35,7 +43,7 @@ struct Y2KBarVisualizerView: View {
         context.fill(Path(ellipseIn: CGRect(x: w*0.48, y: h*0.12, width: w*0.5, height: h*0.6)), with: .radialGradient(orb2Grad, center: CGPoint(x: w*0.7, y: h*0.35), startRadius: 0, endRadius: w*0.4))
 
         // grid
-        let gridColor = Color.white.opacity(0.07)
+        let gridColor = Color.white.opacity(0.07 + 0.14 * flash)
         var gridPath = Path()
         for y in stride(from: visTop, through: baseY, by: 28) {
             gridPath.move(to: CGPoint(x: gap, y: y))
@@ -67,7 +75,7 @@ struct Y2KBarVisualizerView: View {
             let hiH = barH * 0.38
             let hiRect = CGRect(x: x+1, y: y+1, width: barW-2, height: hiH)
             let hiPath = Path(roundedRect: hiRect, cornerRadius: barW*0.22)
-            context.fill(hiPath, with: .linearGradient(Gradient(colors: [.white.opacity(0.62), .white.opacity(0.14), .clear]), startPoint: CGPoint(x:x, y:y), endPoint: CGPoint(x:x, y:y+hiH)))
+            context.fill(hiPath, with: .linearGradient(Gradient(colors: [.white.opacity(0.62 + 0.38 * flash), .white.opacity(0.14 + 0.3 * flash), .clear]), startPoint: CGPoint(x:x, y:y), endPoint: CGPoint(x:x, y:y+hiH)))
             var edge = Path()
             edge.move(to: CGPoint(x: x+1, y: y+2))
             edge.addLine(to: CGPoint(x: x+1, y: y+barH-2))

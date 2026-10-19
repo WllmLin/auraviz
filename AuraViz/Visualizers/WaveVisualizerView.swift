@@ -16,9 +16,13 @@ struct WaveVisualizerView: View {
     var theme: ColorTheme
     var sensitivity: Double
     var isActive: Bool = true
+    var beat = BeatAnalysis()
+    /// 0 keeps the volume-only look; 1 applies the full beat effects.
+    var beatReactivity: Double = 0
 
     /// Last ~30 published spectrum frames (oldest first), driving the fading echo lines.
     @State private var echoHistory: [WaveEchoFrame] = []
+    @State private var wavePhase = BeatSyncedPhase()
 
     private static let historyLimit = 30
     private static let maxEchoesDrawn = 10
@@ -31,9 +35,20 @@ struct WaveVisualizerView: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isActive)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+            let now = BeatClock.time(for: timeline.date)
+            // Seconds-equivalent phase: half a second per beat matches the
+            // wall-clock speed at 120 BPM.
+            let t = wavePhase.advance(
+                to: timeline.date.timeIntervalSinceReferenceDate,
+                wallRate: 1,
+                gridPhase: Self.surgingBeatPhase(beat.clock.beatPhase(at: now)),
+                gridRate: 0.5,
+                nominalGridSpeed: beat.clock.beatsPerSecond,
+                reactivity: beatReactivity
+            )
+            let bassKick = isActive ? CGFloat(beatReactivity) * beat.bassEnvelope(at: now) : 0
             Canvas { context, size in
-                draw(in: &context, size: size, time: t)
+                draw(in: &context, size: size, time: t, bassKick: bassKick)
             }
         }
         .background(Color.clear)
@@ -44,12 +59,14 @@ struct WaveVisualizerView: View {
 
     // MARK: - Drawing
 
-    private func draw(in context: inout GraphicsContext, size: CGSize, time t: Double) {
+    private func draw(in context: inout GraphicsContext, size: CGSize, time t: Double, bassKick: CGFloat) {
         let w = size.width
         let h = size.height
         let centerY = h * 0.52
         let g = theme.gradient
         let maxAmplitude = h * 0.42
+        // The low layer jumps up with the bass, up to 6% of the height.
+        let lowLift = bassKick * h * 0.06
 
         // background subtle grid
         let gridColor = Color.white.opacity(0.04)
@@ -84,9 +101,10 @@ struct WaveVisualizerView: View {
             let baseY = baseYs[idx]
             let slice = slices[idx]
             let amplitude = amplitude(for: slice, volume: volume, layerIndex: idx, maxAmplitude: maxAmplitude)
+            let lift = idx == 0 ? lowLift : 0
             let path = wavePath(
                 slice: slice, baseY: baseY, amplitude: amplitude,
-                width: w, points: Self.curvePoints, time: t, layerIndex: idx
+                width: w, points: Self.curvePoints, time: t, layerIndex: idx, lift: lift
             )
 
             var fillPath = path
@@ -96,7 +114,7 @@ struct WaveVisualizerView: View {
 
             // glow fill
             let fillGrad = Gradient(colors: [col.opacity(0.45), col.opacity(0.08), Color.clear])
-            context.fill(fillPath, with: .linearGradient(fillGrad, startPoint: CGPoint(x: 0, y: baseY - amplitude), endPoint: CGPoint(x: 0, y: h)))
+            context.fill(fillPath, with: .linearGradient(fillGrad, startPoint: CGPoint(x: 0, y: baseY - amplitude - lift), endPoint: CGPoint(x: 0, y: h)))
 
             // stroke with shadow for glow
             context.stroke(path, with: .color(col.opacity(0.28)), lineWidth: 12)
@@ -146,7 +164,8 @@ struct WaveVisualizerView: View {
     /// Builds one layer's curve: the region's bands sampled by distance from
     /// center (mirrored), scaled by amplitude, faded at the edges. A small
     /// idle sine is added only when `time` is provided (live wave, not echoes).
-    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0) -> Path {
+    /// `lift` raises the curve under the same edge fade, so the ends stay put.
+    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0, lift: CGFloat = 0) -> Path {
         var path = Path()
         guard w > 0, points > 0 else { return path }
         // Smooth the bands first, then smooth along x after sampling, so the
@@ -162,7 +181,7 @@ struct WaveVisualizerView: View {
         for i in 0...points {
             let x = CGFloat(i) / CGFloat(points) * w
             let envelope = sin(CGFloat(i) / CGFloat(points) * .pi) // fade edges
-            var y = baseY + yDrift - shapes[i] * amplitude * envelope
+            var y = baseY + yDrift - (shapes[i] * amplitude + lift) * envelope
             if let t {
                 y += Self.idleOffset(x: x, time: t, layer: idx) * envelope
             }
@@ -242,6 +261,15 @@ struct WaveVisualizerView: View {
         let p1 = t * (1.4 + Double(idx) * 0.35) + Double(idx) * 1.7
         let p2 = t * 0.9 - Double(idx) * 0.9
         return sin(x * 0.008 + CGFloat(p1)) * 5.0 + sin(x * 0.021 + CGFloat(p2)) * 2.5
+    }
+
+    /// Beat phase that surges right after each beat and coasts into the next
+    /// (about 2x down to 0.5x the tempo), still advancing one unit per beat.
+    private static func surgingBeatPhase(_ beatPhase: Double) -> Double {
+        let beatIndex = floor(beatPhase)
+        let f = beatPhase - beatIndex
+        let eased = 1 - pow(1 - f, 3)
+        return beatIndex + 0.5 * f + 0.5 * eased
     }
 
     private func amplitude(for slice: [CGFloat], volume: CGFloat, layerIndex idx: Int, maxAmplitude: CGFloat) -> CGFloat {

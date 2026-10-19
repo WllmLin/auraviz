@@ -267,14 +267,13 @@ struct ContentView: View {
                     sensitivity: audio.sensitivity,
                     framesPerSecond: circleFramesPerSecond,
                     isActive: audio.isRunning,
-                    lastBeatTime: audio.lastBeatTime,
-                    beatStrength: audio.beatStrength,
-                    beatClock: audio.beatClock
+                    beat: audio.beat,
+                    beatReactivity: audio.beatReactivity
                 )
             case .waves:
-                WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning)
+                WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity)
             case .y2k:
-                Y2KBarVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity)
+                Y2KBarVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity)
             }
         }
     }
@@ -442,6 +441,16 @@ struct ContentView: View {
                         }
                         Slider(value: $audio.smoothing, in: 0...0.92)
                             .tint(.purple)
+                    }
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack {
+                            Label("Beat reactivity", systemImage: "metronome.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                            Spacer()
+                            Text(String(format: "%.0f%%", audio.beatReactivity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
+                        }
+                        Slider(value: $audio.beatReactivity, in: 0...1)
+                            .tint(.pink)
+                            .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
                     }
                     HStack(spacing: 8) {
                         Button {

@@ -54,6 +54,8 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     @Published var sensitivity: Double = 1.0 // 0.3...2.2
     @Published var smoothing: Double = 0.75 // 0...0.92
+    /// Scales every beat-synced visual effect; 0 = volume-only visuals.
+    @Published var beatReactivity: Double = 0.6 // 0...1
     @Published var micPermissionGranted = false
     @Published var systemAudioPermissionGranted = false
 
@@ -64,6 +66,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     // Beat and tempo. For display-rate animation, read the clock inside a
     // TimelineView: `beatClock.beatPhase(at: BeatClock.time(for: timeline.date))`.
+    var beat: BeatAnalysis { visualization.beat }
     var isBeat: Bool { visualization.beat.isBeat }
     var beatCount: Int { visualization.beat.beatCount }
     var lastBeatTime: TimeInterval { visualization.beat.lastBeatTime }
@@ -233,6 +236,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
     func resetVisualizationControls() {
         sensitivity = 1.0
         smoothing = 0.75
+        beatReactivity = 0.6
     }
 
     func requestSystemAudioPermission() {

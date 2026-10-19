@@ -17,7 +17,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Both live inputs use a 4096-point FFT via `Accelerate/vDSP`, a 64-band log-spaced spectrum, RMS volume, waveform samples, and dominant-frequency detection.
 
 - **Controls**
-  - Sensitivity (0.3–2.2×) + Smoothing (0–92%)
+  - Sensitivity (0.3–2.2×) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
 
