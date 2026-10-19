@@ -36,9 +36,10 @@ struct CircularVisualizerView: View {
                 let w = size.width
                 let h = size.height
                 let center = CGPoint(x: w/2, y: h/2)
+                let s = size.visualizerScale
                 // Fit the whole composition (core + bars + orbit + ticks) inside
                 // the smaller dimension so the circle is never clipped top/bottom.
-                let available = min(w, h) / 2 - 18
+                let available = min(w, h) / 2 - 18 * s
                 guard available > 40 else { return }
                 let baseRadius = available * 0.38
                 // Kick-driven breathing; a gentler volume swell keeps the
@@ -52,7 +53,7 @@ struct CircularVisualizerView: View {
                 let glowRect = CGRect(x: center.x - glowRadius, y: center.y - glowRadius, width: glowRadius*2, height: glowRadius*2)
                 context.fill(Path(ellipseIn: glowRect), with: .radialGradient(glowGradient, center: center, startRadius: radius, endRadius: glowRadius))
 
-                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, time: t, beatPhase: beatPhase, beatAge: beatAge, flash: flash, glowBoost: glowBoost, palette: palette)
+                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, scale: s, time: t, beatPhase: beatPhase, beatAge: beatAge, flash: flash, glowBoost: glowBoost, palette: palette)
 
                 // radial bars
                 let count = 72
@@ -60,10 +61,10 @@ struct CircularVisualizerView: View {
                 for i in 0..<count {
                     let angle = (Double(i)/Double(count) * 2 * .pi) - .pi/2 + rotation
                     let amp = circularAmplitude(at: i, barCount: count)
-                    let innerR = radius + 6
+                    let innerR = radius + 6 * s
                     // Clamp so high sensitivity saturates instead of clipping.
-                    let maxLen = max(8, available - innerR - 12)
-                    let len = min(barMax * Double(amp) * sensitivity * 0.95 + 6, maxLen)
+                    let maxLen = max(8 * s, available - innerR - 12 * s)
+                    let len = min(barMax * Double(amp) * sensitivity * 0.95 + 6 * s, maxLen)
                     let outerR = innerR + len
                     let x1 = center.x + cos(angle) * innerR
                     let y1 = center.y + sin(angle) * innerR
@@ -81,25 +82,25 @@ struct CircularVisualizerView: View {
                     path.move(to: CGPoint(x: x1, y: y1))
                     path.addLine(to: CGPoint(x: x2, y: y2))
                     // glow
-                    context.stroke(path, with: .color(col.opacity(0.22)), lineWidth: 9)
-                    context.stroke(path, with: .color(col), lineWidth: 3.2)
+                    context.stroke(path, with: .color(col.opacity(0.22)), lineWidth: 9 * s)
+                    context.stroke(path, with: .color(col), lineWidth: 3.2 * s)
                     // tip dot
-                    let tipSize: CGFloat = 3.2 + CGFloat(amp)*3.0
+                    let tipSize = (3.2 + CGFloat(amp)*3.0) * s
                     let tipRect = CGRect(x: x2 - tipSize/2, y: y2 - tipSize/2, width: tipSize, height: tipSize)
                     context.fill(Path(ellipseIn: tipRect), with: .color(.white.opacity(0.95)))
-                    context.fill(Path(ellipseIn: tipRect.insetBy(dx: -2, dy: -2)), with: .color(col.opacity(0.35)))
+                    context.fill(Path(ellipseIn: tipRect.insetBy(dx: -2 * s, dy: -2 * s)), with: .color(col.opacity(0.35)))
                 }
 
                 // outer thin orbit ring — pinned just inside the view edge
-                let orbitR = available - 8
+                let orbitR = available - 8 * s
                 let orbitPath = Path(ellipseIn: CGRect(x: center.x - orbitR, y: center.y - orbitR, width: orbitR*2, height: orbitR*2))
-                context.stroke(orbitPath, with: .color(.white.opacity(0.08)), lineWidth: 0.8)
+                context.stroke(orbitPath, with: .color(.white.opacity(0.08)), lineWidth: 0.8 * s)
                 // ticks
                 for i in 0..<count {
                     if i % 6 != 0 { continue }
                     let angle = Double(i)/Double(count) * 2 * Double.pi - Double.pi/2
-                    let r1 = orbitR + 2
-                    let r2 = orbitR + 4 + Double(volume)*2
+                    let r1 = orbitR + 2 * s
+                    let r2 = orbitR + (4 + Double(volume)*2) * s
                     let x1 = center.x + cos(angle)*r1
                     let y1 = center.y + sin(angle)*r1
                     let x2 = center.x + cos(angle)*r2
@@ -107,7 +108,7 @@ struct CircularVisualizerView: View {
                     var p = Path()
                     p.move(to: CGPoint(x: x1, y: y1))
                     p.addLine(to: CGPoint(x:x2, y:y2))
-                    context.stroke(p, with: .color(.white.opacity(0.18)), lineWidth: 1)
+                    context.stroke(p, with: .color(.white.opacity(0.18)), lineWidth: s)
                 }
 
                 // volume ring arc at bottom? show volume text
@@ -137,7 +138,7 @@ struct CircularVisualizerView: View {
     /// LED-tunnel core: tempo-synced rings flowing out of a bright eye, a
     /// spectrum-driven dot meter, a segmented LED ring and a white-hot neon rim
     /// that flares on every kick.
-    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, time t: Double, beatPhase: Double, beatAge: Double, flash: Double, glowBoost: Double, palette: NeonPalette) {
+    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, scale s: Double, time t: Double, beatPhase: Double, beatAge: Double, flash: Double, glowBoost: Double, palette: NeonPalette) {
         func circle(_ r: Double) -> Path {
             Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r*2, height: r*2))
         }
@@ -156,10 +157,10 @@ struct CircularVisualizerView: View {
             let p = ((Double(k) + beatPhase) / Double(ringCount)).truncatingRemainder(dividingBy: 1)
             let r = tunnelInner + (tunnelOuter - tunnelInner) * p * p
             let fade = sin(p * .pi)
-            glow.stroke(circle(r), with: .color(palette.tunnel(p).opacity(fade * (0.35 + 0.25 * energy + 0.4 * flash))), lineWidth: 0.8 + 2.2 * p)
+            glow.stroke(circle(r), with: .color(palette.tunnel(p).opacity(fade * (0.35 + 0.25 * energy + 0.4 * flash))), lineWidth: (0.8 + 2.2 * p) * s)
         }
         // dashed boundary of the tunnel, crawling slowly
-        context.stroke(circle(radius * 0.52), with: .color(.white.opacity(0.22)), style: StrokeStyle(lineWidth: 1, dash: [2, 4], dashPhase: t * 6))
+        context.stroke(circle(radius * 0.52), with: .color(.white.opacity(0.22)), style: StrokeStyle(lineWidth: s, dash: [2 * s, 4 * s], dashPhase: t * 6 * s))
 
         // bright eye
         let eyeR = radius * (0.045 + 0.035 * flash)
@@ -171,13 +172,13 @@ struct CircularVisualizerView: View {
         if isActive && beatAge < shockDuration {
             let p = beatAge / shockDuration
             let r = radius * (0.10 + 0.86 * (1 - pow(1 - p, 3)))
-            glow.stroke(circle(r), with: .color(palette.rim.opacity((1 - p) * (0.25 + 0.5 * Double(beat.beatStrength)))), lineWidth: 1 + 3 * (1 - p))
+            glow.stroke(circle(r), with: .color(palette.rim.opacity((1 - p) * (0.25 + 0.5 * Double(beat.beatStrength)))), lineWidth: (1 + 3 * (1 - p)) * s)
         }
 
         // dot meter — three rows per column light up from the inside out with
         // that column's frequency energy; a gap every 8th column segments it
         let dotSize = max(1.6, radius * 0.028)
-        let columns = dotCount(circleRadius: baseRadius * 0.64, spacing: 6, range: 36...120)
+        let columns = dotCount(circleRadius: baseRadius * 0.64, spacing: 6 * s, range: 36...120)
         let gridRotation = -t * 0.12
         var litDots = Path()
         var dimDots = Path()
@@ -197,11 +198,11 @@ struct CircularVisualizerView: View {
         context.fill(dimDots, with: .color(palette.grid.opacity(0.16)))
         glow.fill(litDots, with: .color(palette.grid.opacity(0.95)))
 
-        context.stroke(circle(radius * 0.78), with: .color(.white.opacity(0.18)), lineWidth: 0.8)
+        context.stroke(circle(radius * 0.78), with: .color(.white.opacity(0.18)), lineWidth: 0.8 * s)
 
         // segmented LED ring — brightness bucketed so each level is one fill
         let ledR = radius * 0.86
-        let ledCount = dotCount(circleRadius: baseRadius * 0.86, spacing: 5.5, range: 48...180)
+        let ledCount = dotCount(circleRadius: baseRadius * 0.86, spacing: 5.5 * s, range: 48...180)
         let ledRotation = t * 0.2
         let ledSize = max(1.8, radius * 0.032)
         var ledLevels = Array(repeating: Path(), count: 4)
@@ -223,7 +224,7 @@ struct CircularVisualizerView: View {
         }
         glow.fill(hotCores, with: .color(.white.opacity(0.9)))
 
-        context.stroke(circle(radius * 0.92), with: .color(palette.led.opacity(0.3)), lineWidth: 0.8)
+        context.stroke(circle(radius * 0.92), with: .color(palette.led.opacity(0.3)), lineWidth: 0.8 * s)
 
         // neon rim — stacked strokes fake a bloom around a white-hot line
         let rimPath = circle(radius * 0.97)
@@ -231,7 +232,7 @@ struct CircularVisualizerView: View {
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.10 * intensity)), lineWidth: radius * 0.22)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.22 * intensity)), lineWidth: radius * 0.10)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.55 * intensity)), lineWidth: radius * 0.04)
-        glow.stroke(rimPath, with: .color(.white.opacity(min(1, 0.6 + 0.4 * intensity))), lineWidth: max(1.2, radius * 0.012))
+        glow.stroke(rimPath, with: .color(.white.opacity(min(1, 0.6 + 0.4 * intensity))), lineWidth: max(1.2 * s, radius * 0.012))
     }
 
     /// Dot count for a ring, derived from the un-pulsed radius so the

@@ -11,11 +11,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct AuraVizApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var audio = AudioEngineManager()
+    @StateObject private var performance = PerformanceState()
+    @StateObject private var output = OutputWindowController()
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(audio)
+                .environmentObject(performance)
+                .environmentObject(output)
                 .preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)
@@ -31,5 +35,15 @@ struct AuraVizApp: App {
                 }
             }
         }
+
+        Window("AuraViz Output", id: OutputWindowController.windowID) {
+            OutputView()
+                .environmentObject(audio)
+                .environmentObject(performance)
+                .environmentObject(output)
+                .preferredColorScheme(.dark)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1280, height: 720)
     }
 }

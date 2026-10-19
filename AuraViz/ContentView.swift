@@ -3,11 +3,13 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var audio: AudioEngineManager
-    @State private var selectedMode: VisualMode = .circle
-    @State private var selectedTheme: ColorTheme = .aurora
+    @EnvironmentObject var performance: PerformanceState
+    @EnvironmentObject var output: OutputWindowController
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var showControls = true
-    @State private var circleFramesPerSecond = 30
     @State private var isFullscreen = false
+    @State private var hostWindow = WeakWindow()
 
     var body: some View {
         ZStack {
@@ -44,14 +46,16 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 980, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
+        .background(WindowAccessor { hostWindow.window = $0 })
         .onAppear {
             if !audio.isRunning { audio.start() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
-            isFullscreen = true
+        // Only this window's full screen; the output window toggles its own.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { note in
+            if note.object as? NSWindow === hostWindow.window { isFullscreen = true }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
-            isFullscreen = false
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
+            if note.object as? NSWindow === hostWindow.window { isFullscreen = false }
         }
     }
 
@@ -99,7 +103,7 @@ struct ContentView: View {
                         autoGainBadge
                     }
                     Spacer()
-                    if selectedMode == .circle {
+                    if performance.mode == .circle {
                         fpsButton
                     }
                     chromeButton(icon: showControls ? "chevron.down" : "sliders.horizontal.3", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
@@ -145,9 +149,9 @@ struct ContentView: View {
             HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(LinearGradient(colors: selectedTheme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .fill(LinearGradient(colors: performance.theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 36, height: 36)
-                        .shadow(color: selectedTheme.gradient.first!.opacity(0.5), radius: 10, x: 0, y: 4)
+                        .shadow(color: performance.theme.gradient.first!.opacity(0.5), radius: 10, x: 0, y: 4)
                     Image(systemName: "waveform.path.badge.mic")
                         .foregroundStyle(.white)
                         .font(.system(size: 16, weight: .semibold))
@@ -165,7 +169,7 @@ struct ContentView: View {
             }
             Spacer()
             // mode picker
-            Picker("", selection: $selectedMode) {
+            Picker("", selection: $performance.mode) {
                 ForEach(VisualMode.allCases) { m in
                     Label(m.rawValue, systemImage: m.icon).tag(m)
                 }
@@ -176,12 +180,12 @@ struct ContentView: View {
             // theme
             Menu {
                 ForEach(ColorTheme.allCases) { th in
-                    Button(th.rawValue) { selectedTheme = th }
+                    Button(th.rawValue) { performance.theme = th }
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Circle().fill(LinearGradient(colors: selectedTheme.gradient, startPoint: .leading, endPoint: .trailing)).frame(width: 14, height: 14)
-                    Text(selectedTheme.rawValue).font(.system(size: 12, weight: .semibold, design: .rounded))
+                    Circle().fill(LinearGradient(colors: performance.theme.gradient, startPoint: .leading, endPoint: .trailing)).frame(width: 14, height: 14)
+                    Text(performance.theme.rawValue).font(.system(size: 12, weight: .semibold, design: .rounded))
                     Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
                 }
                 .foregroundStyle(.white)
@@ -191,6 +195,7 @@ struct ContentView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            outputButton
             // collapse controls
             chromeButton(icon: showControls ? "chevron.down" : "chevron.up", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
                 withAnimation(.easeInOut(duration: 0.22)) { showControls.toggle() }
@@ -232,7 +237,7 @@ struct ContentView: View {
                         autoGainBadge
                     }
                     Spacer()
-                    if selectedMode == .circle {
+                    if performance.mode == .circle {
                         fpsButton
                     }
                 }
@@ -263,25 +268,39 @@ struct ContentView: View {
     }
 
     private var visualizerContent: some View {
-        Group {
-            switch selectedMode {
-            case .circle:
-                CircularVisualizerView(
-                    spectrum: audio.spectrum,
-                    volume: audio.volume,
-                    theme: selectedTheme,
-                    sensitivity: audio.sensitivity,
-                    framesPerSecond: circleFramesPerSecond,
-                    isActive: audio.isRunning,
-                    beat: audio.beat,
-                    beatReactivity: audio.beatReactivity
-                )
-            case .waves:
-                WaveVisualizerView(spectrum: audio.spectrum, waveform: audio.waveform, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity)
-            case .y2k:
-                Y2KBarVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: selectedTheme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity)
+        VisualizerStage(audio: audio, mode: performance.mode, theme: performance.theme, framesPerSecond: performance.circleFramesPerSecond)
+    }
+
+    /// Opens the output window full screen on the chosen display; the arrow
+    /// picks the display (and closes the output while it is open).
+    private var outputButton: some View {
+        Menu {
+            Picker("Display", selection: $output.selectedDisplayID) {
+                ForEach(output.displays) { display in
+                    Text(display.name).tag(Optional(display.id))
+                }
             }
+            .pickerStyle(.inline)
+            if output.isOpen {
+                Divider()
+                Button("Close Output") { dismissWindow(id: OutputWindowController.windowID) }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "display").font(.system(size: 11, weight: .bold))
+                Text("Open Output").font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
+        } primaryAction: {
+            output.presentOutput()
+            openWindow(id: OutputWindowController.windowID)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Open the output full screen on \(output.selectedDisplayName). Esc in the output leaves full screen.")
     }
 
     // MARK: - HUD pieces
@@ -311,7 +330,7 @@ struct ContentView: View {
                 BeatFlashDot(
                     lastBeatTime: audio.lastBeatTime,
                     strength: audio.beatStrength,
-                    color: selectedTheme.gradient.first!,
+                    color: performance.theme.gradient.first!,
                     isActive: audio.isRunning
                 )
                 Text(audio.bpm > 0 ? String(format: "%.0f BPM", audio.bpm) : "--- BPM")
@@ -347,9 +366,9 @@ struct ContentView: View {
 
     private var fpsButton: some View {
         Button {
-            circleFramesPerSecond = circleFramesPerSecond == 30 ? 60 : 30
+            performance.circleFramesPerSecond = performance.circleFramesPerSecond == 30 ? 60 : 30
         } label: {
-            Label("\(circleFramesPerSecond) FPS", systemImage: "speedometer")
+            Label("\(performance.circleFramesPerSecond) FPS", systemImage: "speedometer")
                 .font(.system(size: 10, weight: .black, design: .monospaced))
                 .tracking(0.5)
                 .foregroundStyle(.white.opacity(0.85))
@@ -359,10 +378,10 @@ struct ContentView: View {
                 .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .help("Switch circle to \(circleFramesPerSecond == 30 ? 60 : 30) FPS")
+        .help("Switch circle to \(performance.circleFramesPerSecond == 30 ? 60 : 30) FPS")
         .accessibilityLabel("Circle frame rate")
-        .accessibilityValue("\(circleFramesPerSecond) frames per second")
-        .accessibilityHint("Switches to \(circleFramesPerSecond == 30 ? 60 : 30) frames per second")
+        .accessibilityValue("\(performance.circleFramesPerSecond) frames per second")
+        .accessibilityHint("Switches to \(performance.circleFramesPerSecond == 30 ? 60 : 30) frames per second")
     }
 
     private func chromeButton(icon: String, help: String, action: @escaping () -> Void) -> some View {
@@ -527,7 +546,7 @@ struct ContentView: View {
     // MARK: - Helpers
 
     private func toggleFullscreen() {
-        NSApp.keyWindow?.toggleFullScreen(nil)
+        (hostWindow.window ?? NSApp.keyWindow)?.toggleFullScreen(nil)
     }
 
     private func inputStatusBadge(icon: String, title: String, color: Color) -> some View {
@@ -550,13 +569,19 @@ struct ContentView: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.12)).frame(height: 6)
                     Capsule()
-                        .fill(LinearGradient(colors: selectedTheme.gradient, startPoint: .leading, endPoint: .trailing))
+                        .fill(LinearGradient(colors: performance.theme.gradient, startPoint: .leading, endPoint: .trailing))
                         .frame(width: geometry.size.width * audio.volume, height: 6)
                 }
             }
             .frame(width: 90, height: 6)
         }
     }
+}
+
+/// Weak handle to the control window, so it can tell its own full-screen
+/// notifications from the output window's without retaining the window.
+private final class WeakWindow {
+    weak var window: NSWindow?
 }
 
 /// Flashes on each detected beat and fades out over ~150 ms.
@@ -581,6 +606,9 @@ private struct BeatFlashDot: View {
 }
 
 #Preview {
-    ContentView().environmentObject(AudioEngineManager())
+    ContentView()
+        .environmentObject(AudioEngineManager())
+        .environmentObject(PerformanceState())
+        .environmentObject(OutputWindowController())
         .frame(width: 1000, height: 760)
 }

@@ -15,6 +15,9 @@
 		83692270C99B549ED65DEE41 /* CircularVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118B45428EB008034E36B082 /* CircularVisualizerView.swift */; };
 		1280A0ED594D5A3921C07B93 /* WaveVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */; };
 		2DF7E315292F8C7866F4C884 /* Y2KBarVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */; };
+		A8933989C370DFEC48D1D86C /* PerformanceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3334434DE747E4E6C263BE95 /* PerformanceState.swift */; };
+		608AC8ABFD2884FA8838A5B9 /* OutputWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */; };
+		435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */; };
 		6AF183D1D6F34383E4EE4035 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1D18080090E4D43AE61FED35 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -27,6 +30,9 @@
 		118B45428EB008034E36B082 /* CircularVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularVisualizerView.swift; sourceTree = "<group>"; };
 		FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveVisualizerView.swift; sourceTree = "<group>"; };
 		780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Y2KBarVisualizerView.swift; sourceTree = "<group>"; };
+		3334434DE747E4E6C263BE95 /* PerformanceState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceState.swift; sourceTree = "<group>"; };
+		AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputWindow.swift; sourceTree = "<group>"; };
+		2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualizerStage.swift; sourceTree = "<group>"; };
 		1D18080090E4D43AE61FED35 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1EF1CD0DA44C294D3D3884AD /* AuraViz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AuraViz.entitlements; sourceTree = "<group>"; };
 		A311C1A6766E7D76D033ABD6 /* AuraViz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraViz.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,6 +73,8 @@
 				80F7D93056DD1A88A3F62040 /* AudioEngineManager.swift */,
 				BBD1898455671DEBBAAD7D35 /* BeatTracker.swift */,
 				CBAC42FAF43D099EEBA2F14C /* Theme.swift */,
+				3334434DE747E4E6C263BE95 /* PerformanceState.swift */,
+				AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */,
 				1997AF537277371E7A961FB5 /* Visualizers */,
 				1D18080090E4D43AE61FED35 /* Assets.xcassets */,
 				1EF1CD0DA44C294D3D3884AD /* AuraViz.entitlements */,
@@ -80,6 +88,7 @@
 				118B45428EB008034E36B082 /* CircularVisualizerView.swift */,
 				FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */,
 				780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */,
+				2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */,
 			);
 			path = Visualizers;
 			sourceTree = "<group>";
@@ -161,6 +170,9 @@
 				83692270C99B549ED65DEE41 /* CircularVisualizerView.swift in Sources */,
 				1280A0ED594D5A3921C07B93 /* WaveVisualizerView.swift in Sources */,
 				2DF7E315292F8C7866F4C884 /* Y2KBarVisualizerView.swift in Sources */,
+				A8933989C370DFEC48D1D86C /* PerformanceState.swift in Sources */,
+				608AC8ABFD2884FA8838A5B9 /* OutputWindow.swift in Sources */,
+				435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

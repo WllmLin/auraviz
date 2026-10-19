@@ -62,6 +62,7 @@ struct WaveVisualizerView: View {
     private func draw(in context: inout GraphicsContext, size: CGSize, time t: Double, bassKick: CGFloat) {
         let w = size.width
         let h = size.height
+        let s = size.visualizerScale
         let centerY = h * 0.52
         let g = theme.gradient
         let maxAmplitude = h * 0.42
@@ -70,7 +71,7 @@ struct WaveVisualizerView: View {
 
         // background subtle grid
         let gridColor = Color.white.opacity(0.04)
-        let gridSpacing: CGFloat = 28
+        let gridSpacing = 28 * s
         var gridPath = Path()
         for x in stride(from: 0, through: w, by: gridSpacing) {
             gridPath.move(to: CGPoint(x: x, y: 0))
@@ -80,7 +81,7 @@ struct WaveVisualizerView: View {
             gridPath.move(to: CGPoint(x: 0, y: y))
             gridPath.addLine(to: CGPoint(x: w, y: y))
         }
-        context.stroke(gridPath, with: .color(gridColor), lineWidth: 0.6)
+        context.stroke(gridPath, with: .color(gridColor), lineWidth: 0.6 * s)
 
         // Each layer owns one spectrum region; its curve is that region's bands
         // mapped across the width (mirrored around center) via Catmull-Rom.
@@ -90,21 +91,23 @@ struct WaveVisualizerView: View {
             Self.regionSlice(spectrum, Self.highRange),
         ]
         let colors = [g[0], g.count > 1 ? g[1] : g[0], g.last ?? g[0]]
-        let baseYs = [centerY, centerY + 6, centerY - 6]
+        let baseYs = [centerY, centerY + 6 * s, centerY - 6 * s]
+        // Keep the curve's segments short on wide outputs.
+        let curvePoints = max(Self.curvePoints, Int(w / 6))
 
         // Fading echo trails behind the live wave.
-        drawEchoes(in: &context, width: w, baseYs: baseYs, colors: colors, maxAmplitude: maxAmplitude)
+        drawEchoes(in: &context, width: w, scale: s, baseYs: baseYs, colors: colors, maxAmplitude: maxAmplitude)
 
         // Live layered waves with fill + glow + white core.
         for idx in 0..<3 {
             let col = colors[idx]
             let baseY = baseYs[idx]
             let slice = slices[idx]
-            let amplitude = amplitude(for: slice, volume: volume, layerIndex: idx, maxAmplitude: maxAmplitude)
+            let amplitude = amplitude(for: slice, volume: volume, layerIndex: idx, scale: s, maxAmplitude: maxAmplitude)
             let lift = idx == 0 ? lowLift : 0
             let path = wavePath(
                 slice: slice, baseY: baseY, amplitude: amplitude,
-                width: w, points: Self.curvePoints, time: t, layerIndex: idx, lift: lift
+                width: w, scale: s, points: curvePoints, time: t, layerIndex: idx, lift: lift
             )
 
             var fillPath = path
@@ -117,44 +120,45 @@ struct WaveVisualizerView: View {
             context.fill(fillPath, with: .linearGradient(fillGrad, startPoint: CGPoint(x: 0, y: baseY - amplitude - lift), endPoint: CGPoint(x: 0, y: h)))
 
             // stroke with shadow for glow
-            context.stroke(path, with: .color(col.opacity(0.28)), lineWidth: 12)
-            context.stroke(path, with: .color(col), lineWidth: 2.4)
+            context.stroke(path, with: .color(col.opacity(0.28)), lineWidth: 12 * s)
+            context.stroke(path, with: .color(col), lineWidth: 2.4 * s)
             // white core highlight
-            context.stroke(path, with: .color(.white.opacity(0.55)), lineWidth: 1.0)
+            context.stroke(path, with: .color(.white.opacity(0.55)), lineWidth: 1.0 * s)
         }
 
         // center horizontal shine line
         var shine = Path()
         shine.move(to: CGPoint(x: 0, y: centerY))
         shine.addLine(to: CGPoint(x: w, y: centerY))
-        context.stroke(shine, with: .color(.white.opacity(0.06)), lineWidth: 1)
+        context.stroke(shine, with: .color(.white.opacity(0.06)), lineWidth: s)
 
         // volume-linked orb at center
-        let orbR = 14 + volume * 18
+        let orbR = (14 + volume * 18) * s
         let orbGrad = Gradient(colors: [Color.white.opacity(0.9), theme.gradient[0].opacity(0.9)])
         let orbRect = CGRect(x: w / 2 - orbR, y: centerY - orbR, width: orbR * 2, height: orbR * 2)
         context.fill(Path(ellipseIn: orbRect), with: .radialGradient(orbGrad, center: CGPoint(x: w / 2, y: centerY), startRadius: 0, endRadius: orbR))
-        context.stroke(Path(ellipseIn: orbRect.insetBy(dx: -6, dy: -6)), with: .color(theme.gradient[0].opacity(0.25)), lineWidth: 10)
+        context.stroke(Path(ellipseIn: orbRect.insetBy(dx: -6 * s, dy: -6 * s)), with: .color(theme.gradient[0].opacity(0.25)), lineWidth: 10 * s)
     }
 
     /// Past spectrum shapes as thin fading strokes (no fill/glow), oldest faintest
     /// and sunk slightly lower for a sense of motion.
-    private func drawEchoes(in context: inout GraphicsContext, width w: CGFloat, baseYs: [CGFloat], colors: [Color], maxAmplitude: CGFloat) {
+    private func drawEchoes(in context: inout GraphicsContext, width w: CGFloat, scale s: CGFloat, baseYs: [CGFloat], colors: [Color], maxAmplitude: CGFloat) {
         let picks = echoPicks()
         guard !picks.isEmpty else { return }
+        let points = max(Self.echoPoints, Int(w / 12))
         for (j, frame) in picks.enumerated() {
             let frac = Double(j + 1) / Double(picks.count + 1) // 0 = oldest, 1 = newest
             let alpha = 0.04 + 0.20 * pow(frac, 1.5)
-            let drift = CGFloat(picks.count - j) * 0.9
+            let drift = CGFloat(picks.count - j) * 0.9 * s
             let frameSlices = [frame.low, frame.mid, frame.high]
             for idx in 0..<3 {
                 let slice = frameSlices[idx]
                 let path = wavePath(
                     slice: slice, baseY: baseYs[idx],
-                    amplitude: amplitude(for: slice, volume: frame.volume, layerIndex: idx, maxAmplitude: maxAmplitude),
-                    width: w, points: Self.echoPoints, time: nil, layerIndex: idx, yDrift: drift
+                    amplitude: amplitude(for: slice, volume: frame.volume, layerIndex: idx, scale: s, maxAmplitude: maxAmplitude),
+                    width: w, scale: s, points: points, time: nil, layerIndex: idx, yDrift: drift
                 )
-                context.stroke(path, with: .color(colors[idx].opacity(alpha)), lineWidth: 1.1)
+                context.stroke(path, with: .color(colors[idx].opacity(alpha)), lineWidth: 1.1 * s)
             }
         }
     }
@@ -165,7 +169,7 @@ struct WaveVisualizerView: View {
     /// center (mirrored), scaled by amplitude, faded at the edges. A small
     /// idle sine is added only when `time` is provided (live wave, not echoes).
     /// `lift` raises the curve under the same edge fade, so the ends stay put.
-    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0, lift: CGFloat = 0) -> Path {
+    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, scale s: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0, lift: CGFloat = 0) -> Path {
         var path = Path()
         guard w > 0, points > 0 else { return path }
         // Smooth the bands first, then smooth along x after sampling, so the
@@ -183,7 +187,7 @@ struct WaveVisualizerView: View {
             let envelope = sin(CGFloat(i) / CGFloat(points) * .pi) // fade edges
             var y = baseY + yDrift - (shapes[i] * amplitude + lift) * envelope
             if let t {
-                y += Self.idleOffset(x: x, time: t, layer: idx) * envelope
+                y += Self.idleOffset(x: x, time: t, layer: idx, scale: s) * envelope
             }
             if i == 0 {
                 path.move(to: CGPoint(x: x, y: y))
@@ -256,11 +260,12 @@ struct WaveVisualizerView: View {
     }
 
     /// Gentle sine drift so the view stays alive during silence. Deliberately
-    /// small (~±7.5 px) next to the spectrum-driven displacement.
-    private static func idleOffset(x: CGFloat, time t: Double, layer idx: Int) -> CGFloat {
+    /// small (~±7.5 px at scale 1) next to the spectrum-driven displacement.
+    private static func idleOffset(x: CGFloat, time t: Double, layer idx: Int, scale s: CGFloat) -> CGFloat {
         let p1 = t * (1.4 + Double(idx) * 0.35) + Double(idx) * 1.7
         let p2 = t * 0.9 - Double(idx) * 0.9
-        return sin(x * 0.008 + CGFloat(p1)) * 5.0 + sin(x * 0.021 + CGFloat(p2)) * 2.5
+        let u = x / s
+        return (sin(u * 0.008 + CGFloat(p1)) * 5.0 + sin(u * 0.021 + CGFloat(p2)) * 2.5) * s
     }
 
     /// Beat phase that surges right after each beat and coasts into the next
@@ -272,9 +277,9 @@ struct WaveVisualizerView: View {
         return beatIndex + 0.5 * f + 0.5 * eased
     }
 
-    private func amplitude(for slice: [CGFloat], volume: CGFloat, layerIndex idx: Int, maxAmplitude: CGFloat) -> CGFloat {
+    private func amplitude(for slice: [CGFloat], volume: CGFloat, layerIndex idx: Int, scale s: CGFloat, maxAmplitude: CGFloat) -> CGFloat {
         let mean = slice.isEmpty ? 0 : slice.reduce(0, +) / CGFloat(slice.count)
-        let raw = (30 + mean * 130 * CGFloat(sensitivity) + volume * 25) * (0.9 + CGFloat(idx) * 0.12)
+        let raw = (30 + mean * 130 * CGFloat(sensitivity) + volume * 25) * (0.9 + CGFloat(idx) * 0.12) * s
         return min(raw, max(0, maxAmplitude))
     }
 

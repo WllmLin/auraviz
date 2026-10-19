@@ -16,7 +16,9 @@ mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources"
 $TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $DEFINES $LIBS \
   -o "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS/AuraViz" \
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/BeatTracker.swift" "$SRC/Theme.swift" \
-  "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift"
+  "$SRC/PerformanceState.swift" "$SRC/OutputWindow.swift" \
+  "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift" \
+  "$SRC/Visualizers/VisualizerStage.swift"
 cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

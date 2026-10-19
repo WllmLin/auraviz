@@ -20,6 +20,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Auto Gain (on by default; **AGC** badge in the HUD) + Sensitivity (0.3–2.2×, a trim on top of Auto Gain while it is on) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
+  - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
 
 - **Aesthetic**
   - Dark mesh background with blurred aurora orbs, glassmorphism cards, rounded 22pt containers, ultraThinMaterial, neon gradients, glow + shadow.
@@ -30,12 +31,15 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
 AuraViz/
 ├── AuraViz.xcodeproj/project.pbxproj  # Xcode 14+ / macOS 14+ target
 ├── AuraViz/
-│   ├── AuraVizApp.swift               # @main App, WindowGroup
-│   ├── ContentView.swift              # Header, 420pt visualizer card, controls
+│   ├── AuraVizApp.swift               # @main App, control WindowGroup + output Window
+│   ├── ContentView.swift              # Header, preview card, controls
+│   ├── PerformanceState.swift         # Shared mode / theme / Circle FPS
+│   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
 │   ├── BeatTracker.swift              # Kick onsets, spectral flux, BPM, beat phase, tap tempo
 │   ├── Visualizers/
+│   │   ├── VisualizerStage.swift      # Mode switch → current visualizer; size-based scale factor
 │   │   ├── CircularVisualizerView.swift
 │   │   ├── WaveVisualizerView.swift
 │   │   └── Y2KBarVisualizerView.swift
