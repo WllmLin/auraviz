@@ -12,6 +12,7 @@ struct OutputView: View {
         VisualizerStage(audio: audio, mode: performance.mode, theme: performance.theme, framesPerSecond: performance.circleFramesPerSecond)
             .frame(minWidth: 320, maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
             .background(Color.black)
+            .overlay(StageEffectsOverlay())
             .ignoresSafeArea()
             .background(WindowAccessor { output.attach($0) })
     }
@@ -66,6 +67,17 @@ final class OutputWindowController: ObservableObject {
             present(window)
         } else {
             presentWhenAttached = true
+        }
+    }
+
+    /// Leaves full screen if the output is in it, otherwise presents it full
+    /// screen on the selected display. Needs the output window to be open.
+    func toggleFullScreen() {
+        guard let window else { return }
+        if window.styleMask.contains(.fullScreen) {
+            window.toggleFullScreen(nil)
+        } else {
+            present(window)
         }
     }
 

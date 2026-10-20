@@ -30,6 +30,31 @@ struct VisualizerStage: View {
     }
 }
 
+/// Strobe flashes and blackout from the shared performance state, laid over
+/// a stage so the preview and the output show the same thing.
+struct StageEffectsOverlay: View {
+    @EnvironmentObject var performance: PerformanceState
+
+    var body: some View {
+        ZStack {
+            Color.white
+                .keyframeAnimator(initialValue: 0.0, trigger: performance.strobeFlashTime) { content, opacity in
+                    content.opacity(opacity)
+                } keyframes: { _ in
+                    MoveKeyframe(1.0)
+                    LinearKeyframe(1.0, duration: 0.05)
+                    LinearKeyframe(0.0, duration: 0.07)
+                }
+            // Above the strobe so a blackout always wins.
+            Color.black
+                .opacity(performance.isBlackedOut ? 1 : 0)
+                .animation(.easeInOut(duration: PerformanceState.blackoutFadeDuration), value: performance.isBlackedOut)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 extension CGSize {
     /// The visualizers were designed for the original 420pt preview card.
     /// Larger canvases (full screen, projectors, 4K, ultrawide) multiply fixed

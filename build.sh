@@ -16,7 +16,7 @@ mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources"
 $TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $DEFINES $LIBS \
   -o "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS/AuraViz" \
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/BeatTracker.swift" "$SRC/Theme.swift" \
-  "$SRC/PerformanceState.swift" "$SRC/OutputWindow.swift" \
+  "$SRC/PerformanceState.swift" "$SRC/PerformanceCommands.swift" "$SRC/OutputWindow.swift" \
   "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift" \
   "$SRC/Visualizers/VisualizerStage.swift"
 cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'

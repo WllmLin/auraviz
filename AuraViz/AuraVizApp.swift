@@ -34,6 +34,7 @@ struct AuraVizApp: App {
                     ])
                 }
             }
+            PerformanceCommands(audio: audio, performance: performance, output: output)
         }
 
         Window("AuraViz Output", id: OutputWindowController.windowID) {

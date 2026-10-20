@@ -22,6 +22,12 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
 
+- **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
+  - **1 / 2 / 3** visual mode · **T / ⇧T** next / previous theme
+  - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
+  - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
+  - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing and beat reactivity · **H** show/hide controls
+
 - **Aesthetic**
   - Dark mesh background with blurred aurora orbs, glassmorphism cards, rounded 22pt containers, ultraThinMaterial, neon gradients, glow + shadow.
 
@@ -33,7 +39,8 @@ AuraViz/
 ├── AuraViz/
 │   ├── AuraVizApp.swift               # @main App, control WindowGroup + output Window
 │   ├── ContentView.swift              # Header, preview card, controls
-│   ├── PerformanceState.swift         # Shared mode / theme / Circle FPS
+│   ├── PerformanceState.swift         # Shared mode / theme / FPS, blackout, rate-limited strobe
+│   ├── PerformanceCommands.swift      # Performance menu shortcuts + cheat-sheet overlay
 │   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT

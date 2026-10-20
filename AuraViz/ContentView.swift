@@ -45,6 +45,13 @@ struct ContentView: View {
                 windowedLayout
             }
         }
+        .overlay {
+            if performance.isShowingShortcuts {
+                ShortcutCheatSheet(isPresented: $performance.isShowingShortcuts)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.15), value: performance.isShowingShortcuts)
         .frame(minWidth: 980, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
         .background(WindowAccessor { hostWindow.window = $0 })
         .onAppear {
@@ -102,6 +109,9 @@ struct ContentView: View {
                     if audio.autoGainEnabled {
                         autoGainBadge
                     }
+                    if performance.isBlackedOut {
+                        blackoutBadge
+                    }
                     Spacer()
                     if performance.mode == .circle {
                         fpsButton
@@ -110,6 +120,7 @@ struct ContentView: View {
                         withAnimation(.easeInOut(duration: 0.2)) { showControls.toggle() }
                     }
                     .keyboardShortcut("h", modifiers: [])
+                    shortcutsButton
                     chromeButton(icon: "arrow.down.right.and.arrow.up.left", help: "Exit full screen") {
                         toggleFullscreen()
                     }
@@ -201,6 +212,7 @@ struct ContentView: View {
                 withAnimation(.easeInOut(duration: 0.22)) { showControls.toggle() }
             }
             .keyboardShortcut("h", modifiers: [])
+            shortcutsButton
             // fullscreen
             chromeButton(icon: "arrow.up.left.and.arrow.down.right", help: "Enter full screen") {
                 toggleFullscreen()
@@ -236,6 +248,9 @@ struct ContentView: View {
                     if audio.autoGainEnabled {
                         autoGainBadge
                     }
+                    if performance.isBlackedOut {
+                        blackoutBadge
+                    }
                     Spacer()
                     if performance.mode == .circle {
                         fpsButton
@@ -269,6 +284,7 @@ struct ContentView: View {
 
     private var visualizerContent: some View {
         VisualizerStage(audio: audio, mode: performance.mode, theme: performance.theme, framesPerSecond: performance.circleFramesPerSecond)
+            .overlay(StageEffectsOverlay())
     }
 
     /// Opens the output window full screen on the chosen display; the arrow
@@ -343,8 +359,7 @@ struct ContentView: View {
             .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .keyboardShortcut("t", modifiers: [])
-        .help("Click or press T on each beat to tap the tempo")
+        .help("Click or press B on each beat to tap the tempo")
         .accessibilityLabel("Tempo")
         .accessibilityValue(audio.bpm > 0 ? String(format: "%.0f beats per minute", audio.bpm) : "Detecting")
         .accessibilityHint("Tap on each beat to set the tempo")
@@ -362,6 +377,31 @@ struct ContentView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Auto gain on")
             .accessibilityValue(String(format: "%+.0f decibels", audio.autoGainDB))
+    }
+
+    private var blackoutBadge: some View {
+        Button {
+            performance.isBlackedOut = false
+        } label: {
+            Text("BLACKOUT")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Color.red.opacity(0.45), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("The stage is blacked out. Click or press Space to bring it back.")
+        .accessibilityLabel("Blackout on")
+        .accessibilityHint("Brings the stage back")
+    }
+
+    private var shortcutsButton: some View {
+        chromeButton(icon: "questionmark", help: "Keyboard shortcuts (⌘/)") {
+            performance.isShowingShortcuts.toggle()
+        }
+        .accessibilityLabel("Keyboard shortcuts")
     }
 
     private var fpsButton: some View {

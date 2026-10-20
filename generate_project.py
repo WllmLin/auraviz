@@ -23,6 +23,7 @@ files = [
     ("BeatTracker.swift", "AuraViz/BeatTracker.swift"),
     ("Theme.swift", "AuraViz/Theme.swift"),
     ("PerformanceState.swift", "AuraViz/PerformanceState.swift"),
+    ("PerformanceCommands.swift", "AuraViz/PerformanceCommands.swift"),
     ("OutputWindow.swift", "AuraViz/OutputWindow.swift"),
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
@@ -128,6 +129,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['BeatTracker.swift']} /* BeatTracker.swift */,
 \t\t\t\t{file_refs['Theme.swift']} /* Theme.swift */,
 \t\t\t\t{file_refs['PerformanceState.swift']} /* PerformanceState.swift */,
+\t\t\t\t{file_refs['PerformanceCommands.swift']} /* PerformanceCommands.swift */,
 \t\t\t\t{file_refs['OutputWindow.swift']} /* OutputWindow.swift */,
 \t\t\t\t{visualizers_group_id} /* Visualizers */,
 \t\t\t\t{file_refs['Assets.xcassets']} /* Assets.xcassets */,
@@ -225,7 +227,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","PerformanceState.swift","OutputWindow.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
