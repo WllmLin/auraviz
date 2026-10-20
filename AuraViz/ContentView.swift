@@ -5,11 +5,13 @@ struct ContentView: View {
     @EnvironmentObject var audio: AudioEngineManager
     @EnvironmentObject var performance: PerformanceState
     @EnvironmentObject var output: OutputWindowController
+    @EnvironmentObject var presets: PresetStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var showControls = true
     @State private var isFullscreen = false
     @State private var hostWindow = WeakWindow()
+    @State private var newPresetName = ""
 
     var body: some View {
         ZStack {
@@ -52,6 +54,16 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.15), value: performance.isShowingShortcuts)
+        .alert("Save Preset", isPresented: $performance.isNamingPreset) {
+            TextField("Name", text: $newPresetName)
+            Button("Save") {
+                presets.save(name: newPresetName, audio: audio, performance: performance)
+                newPresetName = ""
+            }
+            Button("Cancel", role: .cancel) { newPresetName = "" }
+        } message: {
+            Text("Saves the mode, theme, circle FPS, sensitivity, auto gain, smoothing and beat reactivity. Saving under an existing name replaces that preset.")
+        }
         .frame(minWidth: 980, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
         .background(WindowAccessor { hostWindow.window = $0 })
         .onAppear {
@@ -206,6 +218,7 @@ struct ContentView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+            presetsMenu
             outputButton
             // collapse controls
             chromeButton(icon: showControls ? "chevron.down" : "chevron.up", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
@@ -283,8 +296,26 @@ struct ContentView: View {
     }
 
     private var visualizerContent: some View {
-        VisualizerStage(audio: audio, mode: performance.mode, theme: performance.theme, framesPerSecond: performance.circleFramesPerSecond)
+        PerformanceStage(audio: audio)
             .overlay(StageEffectsOverlay())
+    }
+
+    private var presetsMenu: some View {
+        Menu {
+            PresetsMenuContent(audio: audio, performance: performance, presets: presets)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "rectangle.stack").font(.system(size: 11, weight: .bold))
+                Text("Presets").font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Save, recall and delete presets")
     }
 
     /// Opens the output window full screen on the chosen display; the arrow
@@ -515,7 +546,7 @@ struct ContentView: View {
                             Spacer()
                             Text(String(format: "%.1fx", audio.sensitivity)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
                         }
-                        Slider(value: $audio.sensitivity, in: 0.3...2.2)
+                        Slider(value: $audio.sensitivity, in: AudioEngineManager.sensitivityRange)
                             .tint(.orange)
                             .help(audio.autoGainEnabled ? "Trim on top of auto gain; 1.0x is neutral" : "Input sensitivity")
                     }
@@ -525,7 +556,7 @@ struct ContentView: View {
                             Spacer()
                             Text(String(format: "%.0f%%", audio.smoothing*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
                         }
-                        Slider(value: $audio.smoothing, in: 0...0.92)
+                        Slider(value: $audio.smoothing, in: AudioEngineManager.smoothingRange)
                             .tint(.purple)
                     }
                     VStack(alignment: .leading, spacing: 5) {
@@ -534,7 +565,7 @@ struct ContentView: View {
                             Spacer()
                             Text(String(format: "%.0f%%", audio.beatReactivity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
                         }
-                        Slider(value: $audio.beatReactivity, in: 0...1)
+                        Slider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange)
                             .tint(.pink)
                             .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
                     }
@@ -650,5 +681,6 @@ private struct BeatFlashDot: View {
         .environmentObject(AudioEngineManager())
         .environmentObject(PerformanceState())
         .environmentObject(OutputWindowController())
+        .environmentObject(PresetStore())
         .frame(width: 1000, height: 760)
 }

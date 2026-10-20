@@ -5,11 +5,10 @@ import SwiftUI
 /// on black, with no controls or HUD.
 struct OutputView: View {
     @EnvironmentObject var audio: AudioEngineManager
-    @EnvironmentObject var performance: PerformanceState
     @EnvironmentObject var output: OutputWindowController
 
     var body: some View {
-        VisualizerStage(audio: audio, mode: performance.mode, theme: performance.theme, framesPerSecond: performance.circleFramesPerSecond)
+        PerformanceStage(audio: audio)
             .frame(minWidth: 320, maxWidth: .infinity, minHeight: 180, maxHeight: .infinity)
             .background(Color.black)
             .overlay(StageEffectsOverlay())

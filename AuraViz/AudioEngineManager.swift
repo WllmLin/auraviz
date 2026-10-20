@@ -135,20 +135,33 @@ final class AudioEngineManager: NSObject, ObservableObject {
     @Published var isRunning = false
     @Published var isStarting = false
     @Published var captureError: String?
+    static let sensitivityRange: ClosedRange<Double> = 0.3...2.2
+    static let smoothingRange: ClosedRange<Double> = 0...0.92
+    static let beatReactivityRange: ClosedRange<Double> = 0...1
+
     @Published var inputMode: InputMode = .systemAudio {
         didSet {
+            UserDefaults.standard.set(inputMode.rawValue, forKey: SettingsKey.inputMode)
             guard inputMode != oldValue else { return }
             switchInput()
         }
     }
 
-    @Published var sensitivity: Double = 1.0 // 0.3...2.2
+    @Published var sensitivity: Double = 1.0 {
+        didSet { UserDefaults.standard.set(sensitivity, forKey: SettingsKey.sensitivity) }
+    }
     /// Normalizes volume and spectrum against the recent source level. While
     /// on, `sensitivity` acts as a trim on top of the automatic gain.
-    @Published var autoGainEnabled = true
-    @Published var smoothing: Double = 0.75 // 0...0.92
+    @Published var autoGainEnabled = true {
+        didSet { UserDefaults.standard.set(autoGainEnabled, forKey: SettingsKey.autoGainEnabled) }
+    }
+    @Published var smoothing: Double = 0.75 {
+        didSet { UserDefaults.standard.set(smoothing, forKey: SettingsKey.smoothing) }
+    }
     /// Scales every beat-synced visual effect; 0 = volume-only visuals.
-    @Published var beatReactivity: Double = 0.6 // 0...1
+    @Published var beatReactivity: Double = 0.6 {
+        didSet { UserDefaults.standard.set(beatReactivity, forKey: SettingsKey.beatReactivity) }
+    }
     @Published var micPermissionGranted = false
     @Published var systemAudioPermissionGranted = false
 
@@ -248,6 +261,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        restoreSettings()
         publishBlock = { [weak self] in
             self?.publishPendingVisualization()
         }
@@ -262,6 +276,18 @@ final class AudioEngineManager: NSObject, ObservableObject {
         if let fftSetup {
             vDSP_destroy_fftsetup(fftSetup)
         }
+    }
+
+    private func restoreSettings() {
+        let defaults = UserDefaults.standard
+        if let mode = defaults.string(forKey: SettingsKey.inputMode).flatMap(InputMode.init(rawValue:)) {
+            // Past the didSet: nothing is capturing yet, start() picks it up.
+            _inputMode = Published(initialValue: mode)
+        }
+        sensitivity = defaults.double(forKey: SettingsKey.sensitivity, in: Self.sensitivityRange) ?? sensitivity
+        autoGainEnabled = defaults.object(forKey: SettingsKey.autoGainEnabled) as? Bool ?? autoGainEnabled
+        smoothing = defaults.double(forKey: SettingsKey.smoothing, in: Self.smoothingRange) ?? smoothing
+        beatReactivity = defaults.double(forKey: SettingsKey.beatReactivity, in: Self.beatReactivityRange) ?? beatReactivity
     }
 
     private func setupFFT() {

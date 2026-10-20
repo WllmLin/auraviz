@@ -24,6 +24,15 @@ private struct PerformanceMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // Off while a preset is being named, so these single keys type.
+        Group {
+            shortcuts
+        }
+        .disabled(performance.isNamingPreset)
+    }
+
+    @ViewBuilder
+    private var shortcuts: some View {
         ForEach(Array(VisualMode.allCases.enumerated()), id: \.element) { index, mode in
             Toggle(mode.rawValue, isOn: Binding(
                 get: { performance.mode == mode },

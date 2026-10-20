@@ -30,6 +30,31 @@ struct VisualizerStage: View {
     }
 }
 
+/// The stage for the shared performance look, so the preview and the output
+/// show the same thing. Each layer keeps its identity across a crossfade, so
+/// the outgoing look keeps animating while it fades out under (or over) the
+/// incoming one.
+struct PerformanceStage: View {
+    let audio: AudioEngineManager
+    @EnvironmentObject var performance: PerformanceState
+
+    var body: some View {
+        ZStack {
+            layer(0)
+            layer(1)
+        }
+    }
+
+    @ViewBuilder
+    private func layer(_ index: Int) -> some View {
+        if let look = performance.look(forStageLayer: index) {
+            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond)
+                .opacity(index == performance.liveStageLayer ? 1 : 0)
+                .transition(.opacity)
+        }
+    }
+}
+
 /// Strobe flashes and blackout from the shared performance state, laid over
 /// a stage so the preview and the output show the same thing.
 struct StageEffectsOverlay: View {

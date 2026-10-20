@@ -11,14 +11,33 @@ final class PerformanceState: ObservableObject {
     /// jitter can't squeeze a fourth flash into a window.
     static let strobeMinimumInterval: TimeInterval = 0.36
 
-    @Published var mode: VisualMode = .circle
-    @Published var theme: ColorTheme = .aurora
-    @Published var circleFramesPerSecond = 30
+    static let circleFrameRates = [30, 60]
+    /// How long a preset recall dissolves the stage from the old look.
+    static let crossfadeDuration: TimeInterval = 0.5
+
+    @Published var mode: VisualMode = .circle {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: SettingsKey.mode) }
+    }
+    @Published var theme: ColorTheme = .aurora {
+        didSet { UserDefaults.standard.set(theme.rawValue, forKey: SettingsKey.theme) }
+    }
+    @Published var circleFramesPerSecond = 30 {
+        didSet { UserDefaults.standard.set(circleFramesPerSecond, forKey: SettingsKey.circleFramesPerSecond) }
+    }
     /// Fades the stage to black; audio and analysis keep running.
     @Published var isBlackedOut = false
     /// `BeatClock.now` of the most recent strobe flash.
     @Published private(set) var strobeFlashTime: TimeInterval = -.infinity
     @Published var isShowingShortcuts = false
+    /// Set while the Save Preset alert takes a name. Single-key shortcuts
+    /// stand down so the keys type into the name field instead.
+    @Published var isNamingPreset = false
+
+    /// The stage has two layers. The live one shows the current look; during
+    /// a crossfade the other keeps showing `fadingLook` while it fades out.
+    @Published private(set) var liveStageLayer = 0
+    @Published private(set) var fadingLook: StageLook?
+    private var crossfadeID = 0
 
     private var isStrobeHeld = false
     private var strobeFlashedThisPress = false
@@ -27,10 +46,11 @@ final class PerformanceState: ObservableObject {
     private var resignObserver: NSObjectProtocol?
 
     init() {
+        restoreSettings()
         // Menu key equivalents only fire on key down, so holding S is tracked
         // here, app-wide, and consumed before it reaches the menu.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            guard let self, event.charactersIgnoringModifiers?.lowercased() == "s" else { return event }
+            guard let self, !self.isNamingPreset, event.charactersIgnoringModifiers?.lowercased() == "s" else { return event }
             if event.type == .keyDown {
                 guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
                 if !event.isARepeat { self.beginStrobe() }
@@ -52,10 +72,51 @@ final class PerformanceState: ObservableObject {
         strobeTimer?.invalidate()
     }
 
+    private func restoreSettings() {
+        let defaults = UserDefaults.standard
+        if let mode = defaults.string(forKey: SettingsKey.mode).flatMap(VisualMode.init(rawValue:)) {
+            self.mode = mode
+        }
+        if let theme = defaults.string(forKey: SettingsKey.theme).flatMap(ColorTheme.init(rawValue:)) {
+            self.theme = theme
+        }
+        let framesPerSecond = defaults.integer(forKey: SettingsKey.circleFramesPerSecond)
+        if Self.circleFrameRates.contains(framesPerSecond) {
+            circleFramesPerSecond = framesPerSecond
+        }
+    }
+
     func cycleTheme(by offset: Int) {
         let themes = ColorTheme.allCases
         let index = themes.firstIndex(of: theme) ?? 0
         theme = themes[((index + offset) % themes.count + themes.count) % themes.count]
+    }
+
+    // MARK: - Crossfade
+
+    var look: StageLook {
+        StageLook(mode: mode, theme: theme, framesPerSecond: circleFramesPerSecond)
+    }
+
+    /// The look stage layer `layer` shows, or nil if it's idle.
+    func look(forStageLayer layer: Int) -> StageLook? {
+        layer == liveStageLayer ? look : fadingLook
+    }
+
+    /// Runs `changes` and dissolves the stage from the old look to the new one
+    /// over `crossfadeDuration`, rather than cutting.
+    func crossfade(_ changes: () -> Void) {
+        crossfadeID += 1
+        let id = crossfadeID
+        withAnimation(.easeInOut(duration: Self.crossfadeDuration)) {
+            fadingLook = look
+            liveStageLayer = 1 - liveStageLayer
+            changes()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossfadeDuration) { [weak self] in
+            guard let self, self.crossfadeID == id else { return }
+            self.fadingLook = nil
+        }
     }
 
     // MARK: - Strobe
@@ -105,4 +166,11 @@ final class PerformanceState: ObservableObject {
         strobeFlashedThisPress = true
         if isStrobeHeld { scheduleStrobeFlash() }
     }
+}
+
+/// What the stage draws; the audio controls only scale its motion.
+struct StageLook: Equatable {
+    var mode: VisualMode
+    var theme: ColorTheme
+    var framesPerSecond: Int
 }

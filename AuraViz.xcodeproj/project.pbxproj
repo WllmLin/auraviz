@@ -15,6 +15,7 @@
 		A8933989C370DFEC48D1D86C /* PerformanceState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3334434DE747E4E6C263BE95 /* PerformanceState.swift */; };
 		E38577C4BF787CCB7F1BDA55 /* PerformanceCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = E45EBB1663A7EE28769B3FBC /* PerformanceCommands.swift */; };
 		608AC8ABFD2884FA8838A5B9 /* OutputWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */; };
+		6EB7DD22C614F9FCFC01723D /* Presets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEBCFCF3D8FFDD21C9959C7D /* Presets.swift */; };
 		83692270C99B549ED65DEE41 /* CircularVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118B45428EB008034E36B082 /* CircularVisualizerView.swift */; };
 		1280A0ED594D5A3921C07B93 /* WaveVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */; };
 		2DF7E315292F8C7866F4C884 /* Y2KBarVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */; };
@@ -31,6 +32,7 @@
 		3334434DE747E4E6C263BE95 /* PerformanceState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceState.swift; sourceTree = "<group>"; };
 		E45EBB1663A7EE28769B3FBC /* PerformanceCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceCommands.swift; sourceTree = "<group>"; };
 		AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutputWindow.swift; sourceTree = "<group>"; };
+		BEBCFCF3D8FFDD21C9959C7D /* Presets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Presets.swift; sourceTree = "<group>"; };
 		118B45428EB008034E36B082 /* CircularVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularVisualizerView.swift; sourceTree = "<group>"; };
 		FED2BF08E947900A6BD37226 /* WaveVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveVisualizerView.swift; sourceTree = "<group>"; };
 		780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Y2KBarVisualizerView.swift; sourceTree = "<group>"; };
@@ -78,6 +80,7 @@
 				3334434DE747E4E6C263BE95 /* PerformanceState.swift */,
 				E45EBB1663A7EE28769B3FBC /* PerformanceCommands.swift */,
 				AAD8FBB6C2B91F6D72CD6FB5 /* OutputWindow.swift */,
+				BEBCFCF3D8FFDD21C9959C7D /* Presets.swift */,
 				1997AF537277371E7A961FB5 /* Visualizers */,
 				1D18080090E4D43AE61FED35 /* Assets.xcassets */,
 				1EF1CD0DA44C294D3D3884AD /* AuraViz.entitlements */,
@@ -176,6 +179,7 @@
 				A8933989C370DFEC48D1D86C /* PerformanceState.swift in Sources */,
 				E38577C4BF787CCB7F1BDA55 /* PerformanceCommands.swift in Sources */,
 				608AC8ABFD2884FA8838A5B9 /* OutputWindow.swift in Sources */,
+				6EB7DD22C614F9FCFC01723D /* Presets.swift in Sources */,
 				435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

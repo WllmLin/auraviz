@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum VisualMode: String, CaseIterable, Identifiable {
+enum VisualMode: String, CaseIterable, Identifiable, Codable {
     case circle = "Circle"
     case waves = "Waves"
     case y2k = "Bars"
@@ -14,7 +14,7 @@ enum VisualMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum ColorTheme: String, CaseIterable, Identifiable {
+enum ColorTheme: String, CaseIterable, Identifiable, Codable {
     case aurora = "Aurora"
     case sunset = "Sunset"
     case ocean = "Ocean"

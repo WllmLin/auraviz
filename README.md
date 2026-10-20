@@ -21,6 +21,12 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
+  - Mode, theme, Circle FPS, input, Auto Gain, Sensitivity, Smoothing and Beat reactivity are remembered across launches.
+
+- **Presets** (header **Presets** button and the **Presets** menu)
+  - Built-in: **Chill** (Waves, Ocean, high smoothing) · **Peak Time** (Circle, Cyberpunk, low smoothing, 60 FPS) · **Retro** (Bars, Y2K Chrome)
+  - **Save Current…** stores mode, theme, Circle FPS, Sensitivity, Auto Gain, Smoothing and Beat reactivity under a name (an existing name is replaced); **Delete** removes your own presets. Saved as JSON in `~/Library/Application Support/com.auraviz.app/Presets.json`.
+  - Recalling a preset crossfades the preview and output to the new look over 0.5 s; the input source is left alone.
 
 - **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
   - **1 / 2 / 3** visual mode · **T / ⇧T** next / previous theme
@@ -39,14 +45,15 @@ AuraViz/
 ├── AuraViz/
 │   ├── AuraVizApp.swift               # @main App, control WindowGroup + output Window
 │   ├── ContentView.swift              # Header, preview card, controls
-│   ├── PerformanceState.swift         # Shared mode / theme / FPS, blackout, rate-limited strobe
+│   ├── PerformanceState.swift         # Shared mode / theme / FPS, blackout, rate-limited strobe, crossfade
 │   ├── PerformanceCommands.swift      # Performance menu shortcuts + cheat-sheet overlay
+│   ├── Presets.swift                  # Preset model, built-ins, JSON store, Presets menu; settings keys
 │   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
 │   ├── BeatTracker.swift              # Kick onsets, spectral flux, BPM, beat phase, tap tempo
 │   ├── Visualizers/
-│   │   ├── VisualizerStage.swift      # Mode switch → current visualizer; size-based scale factor
+│   │   ├── VisualizerStage.swift      # Mode switch → current visualizer; crossfading stage; scale factor
 │   │   ├── CircularVisualizerView.swift
 │   │   ├── WaveVisualizerView.swift
 │   │   └── Y2KBarVisualizerView.swift

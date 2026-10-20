@@ -13,6 +13,7 @@ struct AuraVizApp: App {
     @StateObject private var audio = AudioEngineManager()
     @StateObject private var performance = PerformanceState()
     @StateObject private var output = OutputWindowController()
+    @StateObject private var presets = PresetStore()
 
     var body: some Scene {
         WindowGroup {
@@ -20,6 +21,7 @@ struct AuraVizApp: App {
                 .environmentObject(audio)
                 .environmentObject(performance)
                 .environmentObject(output)
+                .environmentObject(presets)
                 .preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)
@@ -35,6 +37,9 @@ struct AuraVizApp: App {
                 }
             }
             PerformanceCommands(audio: audio, performance: performance, output: output)
+            CommandMenu("Presets") {
+                PresetsMenuContent(audio: audio, performance: performance, presets: presets)
+            }
         }
 
         Window("AuraViz Output", id: OutputWindowController.windowID) {
