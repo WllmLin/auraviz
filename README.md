@@ -1,15 +1,16 @@
 # AuraViz — Aesthetic Audio Visualizer for macOS
 
-Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **volume** and **frequency**.
+Native macOS SwiftUI app with four aesthetic visualizer modes reacting to **volume** and **frequency**.
 
 <img src="https://via.placeholder.com/900x480/0B0B12/FFFFFF?text=AuraViz+Preview" />
 
 ## Features
 
-- **Three visualizers**
+- **Four visualizers**
   - **Circle** — radial spectrum around a neon LED-tunnel core: BPM-synced tunnel rings, spectrum dot meter, segmented LED ring and a neon rim that flares with a shockwave on every kick
   - **Waves** — three layered filled sine waves driven by low/mid/high bands + live waveform, with grid and central orb
   - **Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
+  - **Tunnel** — pseudo-3D flight through hexagonal rings in the theme's colors: one ring per beat once a tempo is detected (volume sets the speed until then), outlines wobbling with the spectrum, corner rails spiraling to a drifting vanishing point, and a white-hot ring launched down the tunnel on every kick
 
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
@@ -29,7 +30,7 @@ Native macOS SwiftUI app with three aesthetic visualizer modes reacting to **vol
   - Recalling a preset crossfades the preview and output to the new look over 0.5 s; the input source is left alone.
 
 - **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
-  - **1 / 2 / 3** visual mode · **T / ⇧T** next / previous theme
+  - **1 / 2 / 3 / 4** visual mode · **T / ⇧T** next / previous theme
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
   - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing and beat reactivity · **H** show/hide controls
@@ -98,7 +99,7 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 
 ## Performance
 
-- Circle can switch between 30 and 60 FPS, while Waves animate at 30 FPS; both stop scheduling frames when paused.
+- Circle can switch between 30 and 60 FPS, Waves animate at 30 FPS and Tunnel at 60 FPS; all three stop scheduling frames when paused.
 - Bars redraw only when new audio data arrives; there is no independent animation timer.
 - Frequency-band boundaries are cached per sample rate, FFT storage is reused, and each analysis publishes one combined SwiftUI update.
 - The standalone packaging script uses whole-module optimization for its production binary.

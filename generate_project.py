@@ -29,6 +29,7 @@ files = [
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
     ("Y2KBarVisualizerView.swift", "AuraViz/Visualizers/Y2KBarVisualizerView.swift"),
+    ("TunnelVisualizerView.swift", "AuraViz/Visualizers/TunnelVisualizerView.swift"),
     ("VisualizerStage.swift", "AuraViz/Visualizers/VisualizerStage.swift"),
     ("Assets.xcassets", "AuraViz/Assets.xcassets"),
     ("AuraViz.entitlements", "AuraViz/AuraViz.entitlements"),
@@ -146,6 +147,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['CircularVisualizerView.swift']} /* CircularVisualizerView.swift */,
 \t\t\t\t{file_refs['WaveVisualizerView.swift']} /* WaveVisualizerView.swift */,
 \t\t\t\t{file_refs['Y2KBarVisualizerView.swift']} /* Y2KBarVisualizerView.swift */,
+\t\t\t\t{file_refs['TunnelVisualizerView.swift']} /* TunnelVisualizerView.swift */,
 \t\t\t\t{file_refs['VisualizerStage.swift']} /* VisualizerStage.swift */,
 \t\t\t);
 \t\t\tpath = Visualizers;
@@ -229,7 +231,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;

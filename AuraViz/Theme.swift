@@ -4,12 +4,14 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     case circle = "Circle"
     case waves = "Waves"
     case y2k = "Bars"
+    case tunnel = "Tunnel"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .circle: return "circle.dashed"
         case .waves: return "waveform.path.ecg"
         case .y2k: return "chart.bar.fill"
+        case .tunnel: return "hexagon"
         }
     }
 }

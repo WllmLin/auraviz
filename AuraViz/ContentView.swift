@@ -198,7 +198,7 @@ struct ContentView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .frame(width: 340)
+            .frame(width: 440)
             .background(.ultraThinMaterial, in: Capsule())
             // theme
             Menu {
