@@ -119,6 +119,26 @@ final class PresetStore: ObservableObject {
             smoothing: 0.6,
             beatReactivity: 0.7
         ),
+        Preset(
+            id: UUID(uuidString: "6A1F3C52-0B7E-4C1D-9A55-1C0FFEE00004")!,
+            name: "Hyperdrive",
+            mode: .tunnel,
+            theme: .tokyoNight,
+            circleFramesPerSecond: 60,
+            sensitivity: 1.1,
+            smoothing: 0.4,
+            beatReactivity: 0.9
+        ),
+        Preset(
+            id: UUID(uuidString: "6A1F3C52-0B7E-4C1D-9A55-1C0FFEE00005")!,
+            name: "Fireworks",
+            mode: .particles,
+            theme: .sunset,
+            circleFramesPerSecond: 60,
+            sensitivity: 1.0,
+            smoothing: 0.5,
+            beatReactivity: 1.0
+        ),
     ]
 
     private static let logger = Logger(subsystem: "com.auraviz.app", category: "Presets")
