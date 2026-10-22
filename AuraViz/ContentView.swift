@@ -9,6 +9,7 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var showControls = true
+    @State private var isNarrowLayout = false
     @State private var isFullscreen = false
     @State private var hostWindow = WeakWindow()
     @State private var newPresetName = ""
@@ -41,7 +42,8 @@ struct ContentView: View {
         } message: {
             Text("Saves the mode, theme, circle FPS, sensitivity, auto gain, smoothing and beat reactivity. Saving under an existing name replaces that preset.")
         }
-        .frame(minWidth: 980, maxWidth: .infinity, minHeight: 600, maxHeight: .infinity)
+        .frame(minWidth: Self.minWindowSize.width, maxWidth: .infinity, minHeight: Self.minWindowSize.height, maxHeight: .infinity)
+        .onGeometryChange(for: Bool.self) { $0.size.width < Self.narrowLayoutWidth } action: { isNarrowLayout = $0 }
         .background(WindowAccessor { hostWindow.window = $0 })
         .onAppear {
             if !audio.isRunning { audio.start() }
@@ -57,13 +59,18 @@ struct ContentView: View {
 
     // MARK: - Layouts
 
+    static let minWindowSize = CGSize(width: 760, height: 560)
+    static let defaultWindowSize = CGSize(width: 1280, height: 820)
+    /// Below this window width the sliders wrap into two rows.
+    private static let narrowLayoutWidth: CGFloat = 1080
+
     private var windowedLayout: some View {
         VStack(spacing: 12) {
             headerView
 
             // Visualizer Card — flexible height so the circle gets all leftover space
             visualizerCard
-                .frame(minHeight: 300, maxHeight: .infinity)
+                .frame(minHeight: 220, maxHeight: .infinity)
                 .layoutPriority(1)
                 .padding(.horizontal, 18)
 
@@ -145,58 +152,25 @@ struct ContentView: View {
     // MARK: - Header
 
     private var headerView: some View {
+        // Widest first; ViewThatFits shows the first one that fits the window.
+        ViewThatFits(in: .horizontal) {
+            header(.regular)
+            header(.condensed)
+            header(.iconic)
+            header(.compact)
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+    }
+
+    private func header(_ density: HeaderDensity) -> some View {
         HStack(spacing: 12) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(LinearGradient(colors: performance.theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .frame(width: 36, height: 36)
-                        .shadow(color: performance.theme.gradient.first!.opacity(0.5), radius: 10, x: 0, y: 4)
-                    Image(systemName: "waveform.path.badge.mic")
-                        .foregroundStyle(.white)
-                        .font(.system(size: 16, weight: .semibold))
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("AURA_VIZ")
-                        .font(.system(size: 18, weight: .black, design: .rounded))
-                        .tracking(1.4)
-                        .foregroundStyle(.white)
-                    Text("AESTHETIC AUDIO VISUALIZER  •  macOS")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .tracking(0.8)
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-            }
-            Spacer()
-            // mode picker
-            Picker("", selection: $performance.mode) {
-                ForEach(VisualMode.allCases) { m in
-                    Label(m.rawValue, systemImage: m.icon).tag(m)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 530)
-            .background(.ultraThinMaterial, in: Capsule())
-            // theme
-            Menu {
-                ForEach(ColorTheme.allCases) { th in
-                    Button(th.rawValue) { performance.theme = th }
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Circle().fill(LinearGradient(colors: performance.theme.gradient, startPoint: .leading, endPoint: .trailing)).frame(width: 14, height: 14)
-                    Text(performance.theme.rawValue).font(.system(size: 12, weight: .semibold, design: .rounded))
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12).padding(.vertical, 7)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            presetsMenu
-            outputButton
+            brand(density)
+            Spacer(minLength: 12)
+            modePicker(showsLabels: density < .compact)
+            themeMenu(showsName: density < .iconic)
+            presetsMenu(showsTitle: density < .iconic)
+            outputButton(showsTitle: density < .iconic)
             // collapse controls
             chromeButton(icon: showControls ? "chevron.down" : "chevron.up", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
                 withAnimation(.easeInOut(duration: 0.22)) { showControls.toggle() }
@@ -208,8 +182,83 @@ struct ContentView: View {
                 toggleFullscreen()
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
+    }
+
+    private func brand(_ density: HeaderDensity) -> some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(LinearGradient(colors: performance.theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 36, height: 36)
+                    .shadow(color: performance.theme.gradient.first!.opacity(0.5), radius: 10, x: 0, y: 4)
+                Image(systemName: "waveform.path.badge.mic")
+                    .foregroundStyle(.white)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            if density < .compact {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("AURA_VIZ")
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .tracking(1.4)
+                        .foregroundStyle(.white)
+                    if density < .condensed {
+                        Text("AESTHETIC AUDIO VISUALIZER  •  macOS")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                }
+                .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("AuraViz")
+    }
+
+    private func modePicker(showsLabels: Bool) -> some View {
+        Picker("Mode", selection: $performance.mode) {
+            ForEach(VisualMode.allCases) { m in
+                Group {
+                    if showsLabels {
+                        Label(m.rawValue, systemImage: m.icon)
+                    } else {
+                        Image(systemName: m.icon)
+                            .accessibilityLabel(m.rawValue)
+                    }
+                }
+                .help(m.rawValue)
+                .tag(m)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+
+    private func themeMenu(showsName: Bool) -> some View {
+        Menu {
+            ForEach(ColorTheme.allCases) { th in
+                Button(th.rawValue) { performance.theme = th }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(LinearGradient(colors: performance.theme.gradient, startPoint: .leading, endPoint: .trailing)).frame(width: 14, height: 14)
+                if showsName {
+                    Text(performance.theme.rawValue).font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Theme: \(performance.theme.rawValue)")
+        .accessibilityLabel("Theme")
+        .accessibilityValue(performance.theme.rawValue)
     }
 
     // MARK: - Visualizer
@@ -277,13 +326,15 @@ struct ContentView: View {
             .overlay(StageEffectsOverlay())
     }
 
-    private var presetsMenu: some View {
+    private func presetsMenu(showsTitle: Bool) -> some View {
         Menu {
             PresetsMenuContent(audio: audio, performance: performance, presets: presets)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "rectangle.stack").font(.system(size: 11, weight: .bold))
-                Text("Presets").font(.system(size: 12, weight: .semibold, design: .rounded))
+                if showsTitle {
+                    Text("Presets").font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 12).padding(.vertical, 7)
@@ -293,11 +344,12 @@ struct ContentView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Save, recall and delete presets")
+        .accessibilityLabel("Presets")
     }
 
     /// Opens the output window full screen on the chosen display; the arrow
     /// picks the display (and closes the output while it is open).
-    private var outputButton: some View {
+    private func outputButton(showsTitle: Bool) -> some View {
         Menu {
             Picker("Display", selection: $output.selectedDisplayID) {
                 ForEach(output.displays) { display in
@@ -312,7 +364,9 @@ struct ContentView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "display").font(.system(size: 11, weight: .bold))
-                Text("Open Output").font(.system(size: 12, weight: .semibold, design: .rounded))
+                if showsTitle {
+                    Text("Open Output").font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 12).padding(.vertical, 7)
@@ -325,6 +379,7 @@ struct ContentView: View {
         .menuStyle(.borderlessButton)
         .fixedSize()
         .help("Open the output full screen on \(output.selectedDisplayName). Esc in the output leaves full screen.")
+        .accessibilityLabel("Open Output")
     }
 
     // MARK: - HUD pieces
@@ -510,61 +565,77 @@ struct ContentView: View {
             Divider().overlay(.white.opacity(0.08))
 
             Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                GridRow {
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Label(audio.autoGainEnabled ? "Trim" : "Sensitivity", systemImage: "eye.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                            Toggle(isOn: $audio.autoGainEnabled) {
-                                Text("Auto Gain").font(.system(size: 10, weight: .bold, design: .rounded))
-                            }
-                            .toggleStyle(.button)
-                            .controlSize(.mini)
-                            .help("Automatic gain control: adapts to quiet and loud sources so both fill the visuals")
-                            Spacer()
-                            Text(String(format: "%.1fx", audio.sensitivity)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                        }
-                        Slider(value: $audio.sensitivity, in: AudioEngineManager.sensitivityRange)
-                            .tint(.orange)
-                            .help(audio.autoGainEnabled ? "Trim on top of auto gain; 1.0x is neutral" : "Input sensitivity")
-                    }
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Label("Smoothing", systemImage: "water.waves").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                            Spacer()
-                            Text(String(format: "%.0f%%", audio.smoothing*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                        }
-                        Slider(value: $audio.smoothing, in: AudioEngineManager.smoothingRange)
-                            .tint(.purple)
-                    }
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack {
-                            Label("Beat reactivity", systemImage: "metronome.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
-                            Spacer()
-                            Text(String(format: "%.0f%%", audio.beatReactivity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
-                        }
-                        Slider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange)
-                            .tint(.pink)
-                            .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
-                    }
-                    HStack(spacing: 8) {
-                        Button {
-                            audio.resetVisualizationControls()
-                        } label: {
-                            Label("Reset", systemImage: "arrow.counterclockwise").font(.system(size: 11, weight: .bold, design: .rounded))
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        Spacer()
-                        Text("PLAY AUDIO IN ANY APP")
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .lineLimit(1)
-                    }
+                if isNarrowLayout {
+                    GridRow { sensitivityControl; smoothingControl }
+                    GridRow { beatReactivityControl; resetControl }
+                } else {
+                    GridRow { sensitivityControl; smoothingControl; beatReactivityControl; resetControl }
                 }
             }
         }
         .padding(16)
         .glassCard()
+    }
+
+    private var sensitivityControl: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label(audio.autoGainEnabled ? "Trim" : "Sensitivity", systemImage: "eye.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                Toggle(isOn: $audio.autoGainEnabled) {
+                    Text("Auto Gain").font(.system(size: 10, weight: .bold, design: .rounded))
+                }
+                .toggleStyle(.button)
+                .controlSize(.mini)
+                .help("Automatic gain control: adapts to quiet and loud sources so both fill the visuals")
+                Spacer()
+                Text(String(format: "%.1fx", audio.sensitivity)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
+            }
+            Slider(value: $audio.sensitivity, in: AudioEngineManager.sensitivityRange)
+                .tint(.orange)
+                .help(audio.autoGainEnabled ? "Trim on top of auto gain; 1.0x is neutral" : "Input sensitivity")
+        }
+    }
+
+    private var smoothingControl: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("Smoothing", systemImage: "water.waves").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                Text(String(format: "%.0f%%", audio.smoothing*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
+            }
+            Slider(value: $audio.smoothing, in: AudioEngineManager.smoothingRange)
+                .tint(.purple)
+        }
+    }
+
+    private var beatReactivityControl: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Label("Beat reactivity", systemImage: "metronome.fill").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                Text(String(format: "%.0f%%", audio.beatReactivity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
+            }
+            Slider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange)
+                .tint(.pink)
+                .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
+        }
+    }
+
+    private var resetControl: some View {
+        HStack(spacing: 8) {
+            Button {
+                audio.resetVisualizationControls()
+            } label: {
+                Label("Reset", systemImage: "arrow.counterclockwise").font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            Spacer()
+            Text("PLAY AUDIO IN ANY APP")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.45))
+                .lineLimit(1)
+        }
     }
 
     private var collapsedControlsBar: some View {
@@ -624,6 +695,16 @@ struct ContentView: View {
             .frame(width: 90, height: 6)
         }
     }
+}
+
+/// How much the header shows, roomiest first.
+private enum HeaderDensity: Int, Comparable {
+    case regular    // everything
+    case condensed  // no subtitle
+    case iconic     // theme, presets and output drop their titles
+    case compact    // modes as icons, no wordmark
+
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.rawValue < rhs.rawValue }
 }
 
 /// Weak handle to the control window, so it can tell its own full-screen

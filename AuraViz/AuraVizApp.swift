@@ -26,6 +26,7 @@ struct AuraVizApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
+        .defaultSize(ContentView.defaultWindowSize)
         .commands {
             CommandGroup(replacing: .appInfo) {
                 Button("About AuraViz") {
