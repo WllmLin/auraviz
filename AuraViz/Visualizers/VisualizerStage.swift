@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The current visualizer for `mode`, fed live from the audio manager. Has no
@@ -10,6 +11,14 @@ struct VisualizerStage: View {
     var framesPerSecond: Int = 30
 
     var body: some View {
+        ZStack {
+            StageOrbs(audio: audio, theme: theme, isActive: audio.isRunning)
+            visualizer
+        }
+    }
+
+    @ViewBuilder
+    private var visualizer: some View {
         switch mode {
         case .circle:
             CircularVisualizerView(
@@ -31,6 +40,119 @@ struct VisualizerStage: View {
         case .particles:
             ParticleVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: theme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity)
         }
+    }
+}
+
+/// Three soft theme-colored orbs behind the visualizer. They drift on slow
+/// Lissajous paths and swell with the bass (or the volume at zero beat
+/// reactivity), redrawing at most 30 times a second and freezing while audio
+/// is stopped.
+///
+/// Takes the manager unobserved and reads it per tick, so audio frames don't
+/// redraw the orbs faster than their own timeline.
+struct StageOrbs: View {
+    let audio: AudioEngineManager
+    var theme: ColorTheme
+    var isActive: Bool
+
+    private struct Orb {
+        var center: CGPoint
+        var amplitude: CGPoint
+        var frequency: CGPoint
+        var phase: CGPoint
+        /// Radius as a fraction of the shorter canvas side.
+        var radius: CGFloat
+        var opacity: Double
+    }
+
+    // Incommensurate frequencies (rad/s, periods of ~40–100 s) so the paths
+    // don't visibly repeat.
+    private static let orbs = [
+        Orb(center: CGPoint(x: 0.25, y: 0.25), amplitude: CGPoint(x: 0.16, y: 0.13), frequency: CGPoint(x: 0.071, y: 0.113), phase: CGPoint(x: 0, y: 1.3), radius: 0.62, opacity: 0.30),
+        Orb(center: CGPoint(x: 0.78, y: 0.70), amplitude: CGPoint(x: 0.14, y: 0.16), frequency: CGPoint(x: 0.089, y: 0.061), phase: CGPoint(x: 2.1, y: 0.4), radius: 0.72, opacity: 0.26),
+        Orb(center: CGPoint(x: 0.50, y: 0.50), amplitude: CGPoint(x: 0.20, y: 0.12), frequency: CGPoint(x: 0.053, y: 0.097), phase: CGPoint(x: 4.0, y: 2.7), radius: 0.52, opacity: 0.22),
+    ]
+
+    /// Shared so every stage layer, in the preview and the output, draws the
+    /// orbs in the same place and a crossfade doesn't show two sets.
+    private static let drift = OrbDrift()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isActive)) { timeline in
+            let now = BeatClock.time(for: timeline.date)
+            let target = isActive ? 0.5 * audio.volume + CGFloat(audio.beatReactivity) * audio.bassEnvelope(at: now) : 0
+            let state = Self.drift.advance(to: now, target: Double(min(1, max(0, target))), isActive: isActive)
+            let colors = theme.orbColors
+            Canvas { context, size in
+                draw(in: context, size: size, time: state.time, level: state.level, colors: colors)
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func draw(in context: GraphicsContext, size: CGSize, time t: Double, level: Double, colors: [Color]) {
+        guard !colors.isEmpty else { return }
+        let side = min(size.width, size.height)
+        for (i, orb) in Self.orbs.enumerated() {
+            let center = CGPoint(
+                x: size.width * (orb.center.x + orb.amplitude.x * CGFloat(sin(orb.frequency.x * t + orb.phase.x))),
+                y: size.height * (orb.center.y + orb.amplitude.y * CGFloat(sin(orb.frequency.y * t + orb.phase.y)))
+            )
+            let r = side * orb.radius * CGFloat(1 + 0.3 * level)
+            let alpha = min(1, orb.opacity * (1 + 0.6 * level))
+            let color = colors[i % colors.count]
+            // Gaussian-like falloff that reaches clear at the ellipse edge, so
+            // the orb looks blurred without an offscreen blur pass.
+            let gradient = Gradient(stops: [
+                .init(color: color.opacity(alpha), location: 0),
+                .init(color: color.opacity(alpha * 0.72), location: 0.25),
+                .init(color: color.opacity(alpha * 0.36), location: 0.5),
+                .init(color: color.opacity(alpha * 0.11), location: 0.75),
+                .init(color: color.opacity(0), location: 1),
+            ])
+            context.fill(
+                Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+                with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: r)
+            )
+        }
+    }
+}
+
+/// Drift time that only advances while audio runs, so the orbs resume where
+/// they stopped, and a smoothed level so they swell and settle instead of
+/// twitching with the fast bass envelope. A class so it can advance inside a
+/// `TimelineView` update without invalidating SwiftUI state.
+private final class OrbDrift {
+    private static let attackTime: TimeInterval = 0.08
+    private static let releaseTime: TimeInterval = 0.6
+
+    private var time: Double = 0
+    private var level: Double = 0
+    private var lastTime: TimeInterval?
+
+    func advance(to now: TimeInterval, target: Double, isActive: Bool) -> (time: Double, level: Double) {
+        defer { lastTime = now }
+        guard isActive, let lastTime else { return (time, level) }
+        // Clamped so resuming after a pause or a hidden window continues
+        // instead of jumping; several layers advancing per frame see dt ≈ 0.
+        let dt = min(0.1, max(0, now - lastTime))
+        time += dt
+        let tau = target > level ? Self.attackTime : Self.releaseTime
+        level += (target - level) * (1 - exp(-dt / tau))
+        return (time, level)
+    }
+}
+
+extension ColorTheme {
+    /// Up to three of the theme's colors, skipping near-black ones that would
+    /// vanish on the dark stage.
+    var orbColors: [Color] {
+        let visible = gradient.filter { color in
+            guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return true }
+            return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent > 0.12
+        }
+        return Array((visible.isEmpty ? gradient : visible).prefix(3))
     }
 }
 

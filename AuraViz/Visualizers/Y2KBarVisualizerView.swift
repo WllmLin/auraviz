@@ -37,12 +37,6 @@ struct Y2KBarVisualizerView: View {
         let maxBarH = visHeight * 0.92
         let baseY = visTop + visHeight
 
-        // orbs
-        let orb1Grad = Gradient(colors: [theme.gradient.first!.opacity(0.35), Color.clear])
-        context.fill(Path(ellipseIn: CGRect(x: w*0.12, y: h*0.08, width: w*0.45, height: h*0.55)), with: .radialGradient(orb1Grad, center: CGPoint(x: w*0.3, y: h*0.3), startRadius: 0, endRadius: w*0.4))
-        let orb2Grad = Gradient(colors: [theme.gradient.last!.opacity(0.30), Color.clear])
-        context.fill(Path(ellipseIn: CGRect(x: w*0.48, y: h*0.12, width: w*0.5, height: h*0.6)), with: .radialGradient(orb2Grad, center: CGPoint(x: w*0.7, y: h*0.35), startRadius: 0, endRadius: w*0.4))
-
         // grid
         let gridColor = Color.white.opacity(0.07 + 0.14 * flash)
         var gridPath = Path()

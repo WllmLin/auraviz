@@ -18,29 +18,6 @@ struct ContentView: View {
             // background mesh
             auraBackgroundGradient
                 .ignoresSafeArea()
-            // subtle orbs
-            GeometryReader { geo in
-                ZStack {
-                    Circle()
-                        .fill(RadialGradient(colors: [Color.purple.opacity(0.22), .clear], center: .center, startRadius: 0, endRadius: 400))
-                        .frame(width: 700, height: 700)
-                        .position(x: geo.size.width * 0.22, y: geo.size.height * 0.18)
-                        .blur(radius: 40)
-                    Circle()
-                        .fill(RadialGradient(colors: [Color.cyan.opacity(0.18), .clear], center: .center, startRadius: 0, endRadius: 500))
-                        .frame(width: 800, height: 800)
-                        .position(x: geo.size.width * 0.85, y: geo.size.height * 0.75)
-                        .blur(radius: 50)
-                    Circle()
-                        .fill(RadialGradient(colors: [Color.pink.opacity(0.14), .clear], center: .center, startRadius: 0, endRadius: 350))
-                        .frame(width: 600, height: 600)
-                        .position(x: geo.size.width * 0.5, y: geo.size.height * 0.5)
-                        .blur(radius: 60)
-                }
-            }
-            .ignoresSafeArea()
-            .allowsHitTesting(false)
-
             if isFullscreen {
                 fullscreenLayout
             } else {
