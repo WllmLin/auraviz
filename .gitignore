@@ -17,3 +17,4 @@ xcuserdata/
 # Python
 __pycache__/
 *.pyc
+.auraviz-ideas.md
