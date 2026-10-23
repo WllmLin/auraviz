@@ -25,7 +25,8 @@ struct OutputDisplay: Identifiable, Hashable {
 
 /// Drives the output window from AppKit: tracks attached displays, moves the
 /// window to the chosen one in native full screen, leaves full screen on Esc
-/// and hides the cursor over the output after 2 s without movement.
+/// and hides the cursor over the output after 2 s without movement. Keeps
+/// the displays awake while the output is full screen.
 final class OutputWindowController: ObservableObject {
     static let windowID = "output"
     private static let cursorIdleDelay: TimeInterval = 2
@@ -46,6 +47,7 @@ final class OutputWindowController: ObservableObject {
     private var lastMouseLocation = NSPoint(x: -1, y: -1)
     private var lastMouseMove: TimeInterval = 0
     private var cursorHidden = false
+    private var displaySleepActivity: NSObjectProtocol?
 
     init() {
         refreshDisplays()
@@ -94,7 +96,11 @@ final class OutputWindowController: ObservableObject {
             center.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
                 self?.detach()
             },
+            center.addObserver(forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { [weak self] _ in
+                self?.preventDisplaySleep()
+            },
             center.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { [weak self] _ in
+                self?.allowDisplaySleep()
                 self?.finishScreenChange()
             },
         ]
@@ -129,6 +135,7 @@ final class OutputWindowController: ObservableObject {
         keyMonitor = nil
         cursorTimer?.invalidate()
         cursorTimer = nil
+        allowDisplaySleep()
         pendingScreen = nil
         window = nil
         isOpen = false
@@ -165,6 +172,19 @@ final class OutputWindowController: ObservableObject {
         DispatchQueue.main.async {
             if !window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
         }
+    }
+
+    // MARK: - Display sleep
+
+    private func preventDisplaySleep() {
+        guard displaySleepActivity == nil else { return }
+        displaySleepActivity = ProcessInfo.processInfo.beginActivity(options: .idleDisplaySleepDisabled, reason: "AuraViz output is full screen")
+    }
+
+    private func allowDisplaySleep() {
+        guard let displaySleepActivity else { return }
+        ProcessInfo.processInfo.endActivity(displaySleepActivity)
+        self.displaySleepActivity = nil
     }
 
     // MARK: - Displays
