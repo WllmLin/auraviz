@@ -21,6 +21,7 @@
 		2DF7E315292F8C7866F4C884 /* Y2KBarVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */; };
 		F6D18F4C72B13E734CE73CCF /* TunnelVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6EC00626ABB9397E35D9A7F /* TunnelVisualizerView.swift */; };
 		C64A465A33D0314E7552EF0F /* ParticleVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACB2D72D092355707E29F76E /* ParticleVisualizerView.swift */; };
+		11CD3D76355694E68595A23F /* LaserVisualizerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70CC8E8AA59D23765DE4A7C8 /* LaserVisualizerView.swift */; };
 		435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */; };
 		6AF183D1D6F34383E4EE4035 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1D18080090E4D43AE61FED35 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -40,6 +41,7 @@
 		780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Y2KBarVisualizerView.swift; sourceTree = "<group>"; };
 		F6EC00626ABB9397E35D9A7F /* TunnelVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelVisualizerView.swift; sourceTree = "<group>"; };
 		ACB2D72D092355707E29F76E /* ParticleVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParticleVisualizerView.swift; sourceTree = "<group>"; };
+		70CC8E8AA59D23765DE4A7C8 /* LaserVisualizerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaserVisualizerView.swift; sourceTree = "<group>"; };
 		2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualizerStage.swift; sourceTree = "<group>"; };
 		1D18080090E4D43AE61FED35 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1EF1CD0DA44C294D3D3884AD /* AuraViz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AuraViz.entitlements; sourceTree = "<group>"; };
@@ -100,6 +102,7 @@
 				780B23F10F51913BF1781DC9 /* Y2KBarVisualizerView.swift */,
 				F6EC00626ABB9397E35D9A7F /* TunnelVisualizerView.swift */,
 				ACB2D72D092355707E29F76E /* ParticleVisualizerView.swift */,
+				70CC8E8AA59D23765DE4A7C8 /* LaserVisualizerView.swift */,
 				2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */,
 			);
 			path = Visualizers;
@@ -184,6 +187,7 @@
 				2DF7E315292F8C7866F4C884 /* Y2KBarVisualizerView.swift in Sources */,
 				F6D18F4C72B13E734CE73CCF /* TunnelVisualizerView.swift in Sources */,
 				C64A465A33D0314E7552EF0F /* ParticleVisualizerView.swift in Sources */,
+				11CD3D76355694E68595A23F /* LaserVisualizerView.swift in Sources */,
 				A8933989C370DFEC48D1D86C /* PerformanceState.swift in Sources */,
 				E38577C4BF787CCB7F1BDA55 /* PerformanceCommands.swift in Sources */,
 				608AC8ABFD2884FA8838A5B9 /* OutputWindow.swift in Sources */,

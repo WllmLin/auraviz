@@ -1,17 +1,18 @@
 # AuraViz — Aesthetic Audio Visualizer for macOS
 
-Native macOS SwiftUI app with five aesthetic visualizer modes reacting to **volume** and **frequency**.
+Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volume** and **frequency**.
 
 <img src="https://via.placeholder.com/900x480/0B0B12/FFFFFF?text=AuraViz+Preview" />
 
 ## Features
 
-- **Five visualizers**
+- **Six visualizers**
   - **Circle** — radial spectrum around a neon LED-tunnel core: BPM-synced tunnel rings, spectrum dot meter, segmented LED ring and a neon rim that flares with a shockwave on every kick
   - **Waves** — three layered filled sine waves driven by low/mid/high bands + live waveform, with grid and central orb
   - **Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
   - **Tunnel** — pseudo-3D flight through hexagonal rings in the theme's colors: one ring per beat once a tempo is detected (volume sets the speed until then), outlines wobbling with the spectrum, corner rails spiraling to a drifting vanishing point, and a white-hot ring launched down the tunnel on every kick
   - **Particles** — beat-driven spark fountain from the center: each beat fires a burst sized by how hard it hit, sparks drift outward with drag in theme colors and fade out, high-frequency energy adds jitter and twinkle
+  - **Laser** — club laser wall: beam fans from emitters along the top edge and the bottom corners sweep across the whole stage, hitting an edge on every beat (one full swing per two beats), brightening with the kick and the low band, drawn additively in the theme's gradient; kick flashes keep to the 3-per-second strobe cap
 
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
@@ -31,7 +32,7 @@ Native macOS SwiftUI app with five aesthetic visualizer modes reacting to **volu
   - Recalling a preset crossfades the preview and output to the new look over 0.5 s; the input source is left alone.
 
 - **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
-  - **1 / 2 / 3 / 4 / 5** visual mode · **T / ⇧T** next / previous theme
+  - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
   - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing and beat reactivity · **H** show/hide controls
@@ -58,7 +59,10 @@ AuraViz/
 │   │   ├── VisualizerStage.swift      # Mode switch → current visualizer; crossfading stage; scale factor
 │   │   ├── CircularVisualizerView.swift
 │   │   ├── WaveVisualizerView.swift
-│   │   └── Y2KBarVisualizerView.swift
+│   │   ├── Y2KBarVisualizerView.swift
+│   │   ├── TunnelVisualizerView.swift
+│   │   ├── ParticleVisualizerView.swift
+│   │   └── LaserVisualizerView.swift
 │   ├── Assets.xcassets/AppIcon.appiconset
 │   └── AuraViz.entitlements           # audio-input, no sandbox
 └── build/AuraViz.app                  # pre-built (adhoc signed)
@@ -100,7 +104,7 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 
 ## Performance
 
-- Circle can switch between 30 and 60 FPS, Waves animate at 30 FPS and Tunnel and Particles at 60 FPS; all four stop scheduling frames when paused.
+- Circle can switch between 30 and 60 FPS, Waves animate at 30 FPS and Tunnel, Particles and Laser at 60 FPS; all five stop scheduling frames when paused.
 - Bars redraw only when new audio data arrives; there is no independent animation timer.
 - Frequency-band boundaries are cached per sample rate, FFT storage is reused, and each analysis publishes one combined SwiftUI update.
 - The standalone packaging script uses whole-module optimization for its production binary.

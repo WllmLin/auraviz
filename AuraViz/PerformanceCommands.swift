@@ -87,7 +87,7 @@ private struct PerformanceMenu: View {
 
 /// The cheat sheet's rows, in menu order.
 private let performanceShortcuts: [(keys: String, action: String)] = [
-    ("1  2  3  4  5", "Circle / Waves / Bars / Tunnel / Particles"),
+    ("1 – 6", "Circle / Waves / Bars / Tunnel / Particles / Laser"),
     ("T", "Next theme"),
     ("⇧T", "Previous theme"),
     ("Space", "Blackout (audio keeps running)"),

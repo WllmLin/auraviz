@@ -6,6 +6,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     case y2k = "Bars"
     case tunnel = "Tunnel"
     case particles = "Particles"
+    case laser = "Laser"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -14,6 +15,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
         case .y2k: return "chart.bar.fill"
         case .tunnel: return "hexagon"
         case .particles: return "sparkles"
+        case .laser: return "laser.burst"
         }
     }
 }
