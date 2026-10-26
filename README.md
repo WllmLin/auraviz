@@ -14,6 +14,8 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - **Particles** — beat-driven spark fountain from the center: each beat fires a burst sized by how hard it hit, sparks drift outward with drag in theme colors and fade out, high-frequency energy adds jitter and twinkle
   - **Laser** — club laser wall: beam fans from emitters along the top edge and the bottom corners sweep across the whole stage, hitting an edge on every beat (one full swing per two beats), brightening with the kick and the low band, drawn additively in the theme's gradient; kick flashes keep to the 3-per-second strobe cap
 
+- **Lyrics overlay** — type lyrics, a track title or a shout-out into the **Lyrics** field under the sliders and toggle **Lyrics** (or press **L**) to lay it over any mode as big kinetic type, wrapped to fill the middle of the preview and output. Each character swells and thickens (regular → black weight) with the RMS volume on a wave that sweeps through the text (once per bar at full beat reactivity), every kick ripples out from the middle and punches the characters up, and the type runs along the theme's gradient with a kick-driven glow. Kick punches keep to the strobe cap; blackout and strobe cover it like the rest of the stage. Return, Esc or a click on the stage finishes editing; the single-key shortcuts are off while you type.
+
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
   - **Microphone mode** — optional live mic via `AVAudioEngine`.
@@ -24,7 +26,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
-  - Mode, theme, Circle FPS, input, Auto Gain, Sensitivity, Smoothing and Beat reactivity are remembered across launches.
+  - Mode, theme, Circle FPS, input, Auto Gain, Sensitivity, Smoothing, Beat reactivity and the lyrics text and overlay toggle are remembered across launches.
 
 - **Presets** (header **Presets** button and the **Presets** menu)
   - Built-in: **Chill** (Waves, Ocean, high smoothing) · **Peak Time** (Circle, Cyberpunk, low smoothing, 60 FPS) · **Retro** (Bars, Y2K Chrome)
@@ -32,7 +34,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Recalling a preset crossfades the preview and output to the new look over 0.5 s; the input source is left alone.
 
 - **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
-  - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme
+  - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme · **L** lyrics overlay on / off
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
   - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing and beat reactivity · **H** show/hide controls
@@ -62,7 +64,8 @@ AuraViz/
 │   │   ├── Y2KBarVisualizerView.swift
 │   │   ├── TunnelVisualizerView.swift
 │   │   ├── ParticleVisualizerView.swift
-│   │   └── LaserVisualizerView.swift
+│   │   ├── LaserVisualizerView.swift
+│   │   └── LyricsOverlayView.swift    # Kinetic-type lyrics laid over every mode
 │   ├── Assets.xcassets/AppIcon.appiconset
 │   └── AuraViz.entitlements           # audio-input, no sandbox
 └── build/AuraViz.app                  # pre-built (adhoc signed)

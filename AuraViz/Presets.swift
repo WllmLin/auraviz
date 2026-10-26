@@ -12,6 +12,8 @@ enum SettingsKey {
     static let autoGainEnabled = "autoGainEnabled"
     static let smoothing = "smoothing"
     static let beatReactivity = "beatReactivity"
+    static let lyricsText = "lyricsText"
+    static let lyricsEnabled = "lyricsEnabled"
 }
 
 extension UserDefaults {

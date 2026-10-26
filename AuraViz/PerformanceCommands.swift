@@ -24,11 +24,12 @@ private struct PerformanceMenu: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        // Off while a preset is being named, so these single keys type.
+        // Off while a preset is being named or the lyrics edited, so these
+        // single keys type.
         Group {
             shortcuts
         }
-        .disabled(performance.isNamingPreset)
+        .disabled(performance.isTypingText)
     }
 
     @ViewBuilder
@@ -45,6 +46,11 @@ private struct PerformanceMenu: View {
             .keyboardShortcut("t", modifiers: [])
         Button("Previous Theme") { performance.cycleTheme(by: -1) }
             .keyboardShortcut("t", modifiers: .shift)
+        Toggle("Lyrics Overlay", isOn: Binding(
+            get: { performance.isLyricsEnabled },
+            set: { isOn in ignoringKeyRepeat { withAnimation(.easeInOut(duration: 0.3)) { performance.isLyricsEnabled = isOn } } }
+        ))
+        .keyboardShortcut("l", modifiers: [])
         Divider()
         Toggle("Blackout", isOn: Binding(
             get: { performance.isBlackedOut },
@@ -90,6 +96,7 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("1 – 6", "Circle / Waves / Bars / Tunnel / Particles / Laser"),
     ("T", "Next theme"),
     ("⇧T", "Previous theme"),
+    ("L", "Lyrics overlay on / off"),
     ("Space", "Blackout (audio keeps running)"),
     ("S hold", "Strobe, at most 3 flashes/s"),
     ("B", "Tap tempo"),

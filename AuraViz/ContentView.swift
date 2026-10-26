@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var isFullscreen = false
     @State private var hostWindow = WeakWindow()
     @State private var newPresetName = ""
+    @FocusState private var isLyricsFieldFocused: Bool
 
     var body: some View {
         ZStack {
@@ -47,6 +48,13 @@ struct ContentView: View {
         .background(WindowAccessor { hostWindow.window = $0 })
         .onAppear {
             if !audio.isRunning { audio.start() }
+            // macOS can make the only text field first responder when the
+            // window opens, which would silence the shortcuts until clicked away.
+            DispatchQueue.main.async { isLyricsFieldFocused = false }
+        }
+        // Single-key shortcuts stand down while the lyrics field has focus.
+        .onChange(of: isLyricsFieldFocused) { _, isFocused in
+            performance.isEditingLyrics = isFocused
         }
         // Only this window's full screen; the output window toggles its own.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { note in
@@ -115,7 +123,7 @@ struct ContentView: View {
                     chromeButton(icon: showControls ? "chevron.down" : "sliders.horizontal.3", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
                         withAnimation(.easeInOut(duration: 0.2)) { showControls.toggle() }
                     }
-                    .keyboardShortcut("h", modifiers: [])
+                    .keyboardShortcut(hideControlsShortcut)
                     shortcutsButton
                     chromeButton(icon: "arrow.down.right.and.arrow.up.left", help: "Exit full screen") {
                         toggleFullscreen()
@@ -175,7 +183,7 @@ struct ContentView: View {
             chromeButton(icon: showControls ? "chevron.down" : "chevron.up", help: showControls ? "Hide controls (H)" : "Show controls (H)") {
                 withAnimation(.easeInOut(duration: 0.22)) { showControls.toggle() }
             }
-            .keyboardShortcut("h", modifiers: [])
+            .keyboardShortcut(hideControlsShortcut)
             shortcutsButton
             // fullscreen
             chromeButton(icon: "arrow.up.left.and.arrow.down.right", help: "Enter full screen") {
@@ -326,6 +334,9 @@ struct ContentView: View {
     private var visualizerContent: some View {
         PerformanceStage(audio: audio)
             .overlay(StageEffectsOverlay())
+            // Clicking the stage finishes editing the lyrics.
+            .contentShape(Rectangle())
+            .onTapGesture { isLyricsFieldFocused = false }
     }
 
     private func presetsMenu(showsTitle: Bool) -> some View {
@@ -574,9 +585,31 @@ struct ContentView: View {
                     GridRow { sensitivityControl; smoothingControl; beatReactivityControl; resetControl }
                 }
             }
+
+            Divider().overlay(.white.opacity(0.08))
+
+            lyricsControl
         }
         .padding(16)
         .glassCard()
+    }
+
+    private var lyricsControl: some View {
+        HStack(spacing: 10) {
+            Toggle(isOn: $performance.isLyricsEnabled.animation(.easeInOut(duration: 0.3))) {
+                Label("Lyrics", systemImage: "textformat.size").font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help("Show the text as kinetic type over the stage and output (L)")
+            TextField("Lyrics, track title or shout-out", text: $performance.lyricsText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .focused($isLyricsFieldFocused)
+                .onSubmit { isLyricsFieldFocused = false }
+                .onExitCommand { isLyricsFieldFocused = false }
+                .help("Return or Esc finishes editing. Performance shortcuts are off while you type.")
+        }
     }
 
     private var sensitivityControl: some View {
@@ -665,6 +698,11 @@ struct ContentView: View {
     }
 
     // MARK: - Helpers
+
+    /// H, except while a text field takes the keyboard.
+    private var hideControlsShortcut: KeyboardShortcut? {
+        performance.isTypingText ? nil : KeyboardShortcut("h", modifiers: [])
+    }
 
     private func toggleFullscreen() {
         (hostWindow.window ?? NSApp.keyWindow)?.toggleFullScreen(nil)

@@ -9,11 +9,17 @@ struct VisualizerStage: View {
     var mode: VisualMode
     var theme: ColorTheme
     var framesPerSecond: Int = 30
+    /// Kinetic type laid over every mode; nil hides it.
+    var lyrics: String? = nil
 
     var body: some View {
         ZStack {
             StageOrbs(audio: audio, theme: theme, isActive: audio.isRunning)
             visualizer
+            if let lyrics {
+                LyricsOverlay(audio: audio, text: lyrics, theme: theme, isActive: audio.isRunning)
+                    .transition(.opacity)
+            }
         }
     }
 
@@ -150,11 +156,16 @@ extension ColorTheme {
     /// Up to three of the theme's colors, skipping near-black ones that would
     /// vanish on the dark stage.
     var orbColors: [Color] {
+        Array(colors(brighterThan: 0.12).prefix(3))
+    }
+
+    /// The theme's colors with a luma over `luma`, or all of them if none is.
+    func colors(brighterThan luma: CGFloat) -> [Color] {
         let visible = gradient.filter { color in
             guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return true }
-            return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent > 0.12
+            return 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent > luma
         }
-        return Array((visible.isEmpty ? gradient : visible).prefix(3))
+        return visible.isEmpty ? gradient : visible
     }
 }
 
@@ -176,7 +187,9 @@ struct PerformanceStage: View {
     @ViewBuilder
     private func layer(_ index: Int) -> some View {
         if let look = performance.look(forStageLayer: index) {
-            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond)
+            // Both layers show the current lyrics, so a crossfade only
+            // recolors them.
+            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics)
                 .opacity(index == performance.liveStageLayer ? 1 : 0)
                 .transition(.opacity)
         }

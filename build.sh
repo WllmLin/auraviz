@@ -18,7 +18,7 @@ $TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/BeatTracker.swift" "$SRC/Theme.swift" \
   "$SRC/PerformanceState.swift" "$SRC/PerformanceCommands.swift" "$SRC/OutputWindow.swift" "$SRC/Presets.swift" \
   "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift" \
-  "$SRC/Visualizers/TunnelVisualizerView.swift" "$SRC/Visualizers/ParticleVisualizerView.swift" "$SRC/Visualizers/LaserVisualizerView.swift" \
+  "$SRC/Visualizers/TunnelVisualizerView.swift" "$SRC/Visualizers/ParticleVisualizerView.swift" "$SRC/Visualizers/LaserVisualizerView.swift" "$SRC/Visualizers/LyricsOverlayView.swift" \
   "$SRC/Visualizers/VisualizerStage.swift"
 cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

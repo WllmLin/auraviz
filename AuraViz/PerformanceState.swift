@@ -32,6 +32,22 @@ final class PerformanceState: ObservableObject {
     /// Set while the Save Preset alert takes a name. Single-key shortcuts
     /// stand down so the keys type into the name field instead.
     @Published var isNamingPreset = false
+    /// Lyrics, a track title or a shout-out, shown as kinetic type over the
+    /// stage while `isLyricsEnabled`.
+    @Published var lyricsText = "" {
+        didSet { UserDefaults.standard.set(lyricsText, forKey: SettingsKey.lyricsText) }
+    }
+    @Published var isLyricsEnabled = false {
+        didSet { UserDefaults.standard.set(isLyricsEnabled, forKey: SettingsKey.lyricsEnabled) }
+    }
+    /// Set while the lyrics field has focus, so the keys type into it.
+    @Published var isEditingLyrics = false
+
+    /// True while a text field takes the keyboard; single-key shortcuts stand down.
+    var isTypingText: Bool { isNamingPreset || isEditingLyrics }
+
+    /// The text the stage overlays, or nil while the overlay is off.
+    var stageLyrics: String? { isLyricsEnabled ? lyricsText : nil }
 
     /// The stage has two layers. The live one shows the current look; during
     /// a crossfade the other keeps showing `fadingLook` while it fades out.
@@ -50,7 +66,7 @@ final class PerformanceState: ObservableObject {
         // Menu key equivalents only fire on key down, so holding S is tracked
         // here, app-wide, and consumed before it reaches the menu.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            guard let self, !self.isNamingPreset, event.charactersIgnoringModifiers?.lowercased() == "s" else { return event }
+            guard let self, !self.isTypingText, event.charactersIgnoringModifiers?.lowercased() == "s" else { return event }
             if event.type == .keyDown {
                 guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else { return event }
                 if !event.isARepeat { self.beginStrobe() }
@@ -84,6 +100,8 @@ final class PerformanceState: ObservableObject {
         if Self.circleFrameRates.contains(framesPerSecond) {
             circleFramesPerSecond = framesPerSecond
         }
+        lyricsText = defaults.string(forKey: SettingsKey.lyricsText) ?? lyricsText
+        isLyricsEnabled = defaults.bool(forKey: SettingsKey.lyricsEnabled)
     }
 
     func cycleTheme(by offset: Int) {
