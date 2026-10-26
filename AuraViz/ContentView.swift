@@ -213,6 +213,8 @@ struct ContentView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("AuraViz")
+        .accessibilityValue("Version \(AppVersion.display)")
+        .help("AuraViz \(AppVersion.display)")
     }
 
     private func modePicker(showsLabels: Bool) -> some View {

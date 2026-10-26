@@ -43,6 +43,18 @@ cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
+# Stamp build date + short git SHA into CFBundleVersion so a binary can be identified
+# (e.g. 20261026.a4d7b9f, "-dirty" if built with uncommitted changes, "nogit" without git metadata).
+BUILD_DATE="$(date +%Y%m%d)"
+GIT_SHA="$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || true)"
+if [ -n "$GIT_SHA" ]; then
+  git -C "$PROJECT_DIR" diff --quiet HEAD -- 2>/dev/null || GIT_SHA="$GIT_SHA-dirty"
+else
+  GIT_SHA="nogit"
+fi
+BUILD_VERSION="$BUILD_DATE.$GIT_SHA"
+plutil -replace CFBundleVersion -string "$BUILD_VERSION" "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist"
+
 # Package the same complete icon set used by Xcode into the standalone app.
 ICON_WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$ICON_WORK_DIR"' EXIT
@@ -52,5 +64,5 @@ iconutil -c icns "$ICON_WORK_DIR/AppIcon.iconset" -o "$PROJECT_DIR/build/AuraViz
 
 echo "APPLAura" > "$PROJECT_DIR/build/AuraViz.app/Contents/PkgInfo"
 codesign --force --deep --sign - "$PROJECT_DIR/build/AuraViz.app" 2>&1 | head
-echo "✅ build/AuraViz.app — $(du -h "$PROJECT_DIR/build/AuraViz.app" | tail -1)"
+echo "✅ build/AuraViz.app ($BUILD_VERSION) — $(du -h "$PROJECT_DIR/build/AuraViz.app" | tail -1)"
 echo "   Open with: open \"$PROJECT_DIR/build/AuraViz.app\""

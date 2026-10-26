@@ -1,6 +1,14 @@
 import AppKit
 import SwiftUI
 
+enum AppVersion {
+    /// CFBundleShortVersionString, e.g. "1.0".
+    static let marketing = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    /// CFBundleVersion; build.sh stamps it as "<yyyymmdd>.<short git sha>".
+    static let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"
+    static let display = "\(marketing) (\(build))"
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
@@ -32,7 +40,8 @@ struct AuraVizApp: App {
                 Button("About AuraViz") {
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [
                         .applicationName: "AuraViz",
-                        .applicationVersion: "1.0 • Aesthetic Visualizer",
+                        .applicationVersion: "\(AppVersion.marketing) • Aesthetic Visualizer",
+                        .version: AppVersion.build,
                         .credits: NSAttributedString(string: "Circle • Waves • Bars\nBuilt with SwiftUI + ScreenCaptureKit + Accelerate")
                     ])
                 }
