@@ -36,8 +36,8 @@ private struct PerformanceMenu: View {
     private var shortcuts: some View {
         ForEach(Array(VisualMode.allCases.enumerated()), id: \.element) { index, mode in
             Toggle(mode.rawValue, isOn: Binding(
-                get: { performance.mode == mode },
-                set: { if $0 { performance.mode = mode } }
+                get: { performance.targetLook.mode == mode },
+                set: { if $0 { performance.switchMode(to: mode, clock: audio.transitionClock) } }
             ))
             .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [])
         }

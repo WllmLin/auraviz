@@ -12,17 +12,41 @@ final class PerformanceState: ObservableObject {
     static let strobeMinimumInterval: TimeInterval = 0.36
 
     static let circleFrameRates = [30, 60]
-    /// How long a preset recall dissolves the stage from the old look.
+    /// How long the crossfade transition dissolves the stage from the old look.
     static let crossfadeDuration: TimeInterval = 0.5
+    /// A switch asked for this soon after a beat or bar lands on that one
+    /// instead of waiting a whole beat or bar for the next.
+    static let quantizeLateTolerance: TimeInterval = 0.06
 
+    /// Set directly, these cut. Mode switches and preset recalls go through
+    /// `show(_:clock:)` to use the chosen transition and quantize.
     @Published var mode: VisualMode = .circle {
         didSet { UserDefaults.standard.set(mode.rawValue, forKey: SettingsKey.mode) }
     }
+    /// Theme and frame-rate changes apply at once, and carry into a queued
+    /// look so it doesn't revert them when it lands.
     @Published var theme: ColorTheme = .aurora {
-        didSet { UserDefaults.standard.set(theme.rawValue, forKey: SettingsKey.theme) }
+        didSet {
+            UserDefaults.standard.set(theme.rawValue, forKey: SettingsKey.theme)
+            queuedLook?.theme = theme
+        }
     }
     @Published var circleFramesPerSecond = 30 {
-        didSet { UserDefaults.standard.set(circleFramesPerSecond, forKey: SettingsKey.circleFramesPerSecond) }
+        didSet {
+            UserDefaults.standard.set(circleFramesPerSecond, forKey: SettingsKey.circleFramesPerSecond)
+            queuedLook?.framesPerSecond = circleFramesPerSecond
+        }
+    }
+    /// How the stage hands over from one look to the next.
+    @Published var transition: StageTransition = .crossfade {
+        didSet { UserDefaults.standard.set(transition.rawValue, forKey: SettingsKey.stageTransition) }
+    }
+    /// Whether look changes wait for the next beat or bar of the beat grid.
+    @Published var transitionQuantize: TransitionQuantize = .off {
+        didSet {
+            UserDefaults.standard.set(transitionQuantize.rawValue, forKey: SettingsKey.transitionQuantize)
+            if transitionQuantize == .off { showQueuedLookNow() }
+        }
     }
     /// Fades the stage to black; audio and analysis keep running.
     @Published var isBlackedOut = false
@@ -50,10 +74,13 @@ final class PerformanceState: ObservableObject {
     var stageLyrics: String? { isLyricsEnabled ? lyricsText : nil }
 
     /// The stage has two layers. The live one shows the current look; during
-    /// a crossfade the other keeps showing `fadingLook` while it fades out.
+    /// a transition the other keeps showing the handoff's outgoing look.
     @Published private(set) var liveStageLayer = 0
-    @Published private(set) var fadingLook: StageLook?
-    private var crossfadeID = 0
+    @Published private(set) var handoff: StageHandoff?
+    /// The look waiting for the next beat or bar while quantized.
+    @Published private(set) var queuedLook: StageLook?
+    private var handoffID = 0
+    private var queueTimer: Timer?
 
     private var isStrobeHeld = false
     private var strobeFlashedThisPress = false
@@ -86,6 +113,7 @@ final class PerformanceState: ObservableObject {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
         strobeTimer?.invalidate()
+        queueTimer?.invalidate()
     }
 
     private func restoreSettings() {
@@ -100,6 +128,12 @@ final class PerformanceState: ObservableObject {
         if Self.circleFrameRates.contains(framesPerSecond) {
             circleFramesPerSecond = framesPerSecond
         }
+        if let transition = defaults.string(forKey: SettingsKey.stageTransition).flatMap(StageTransition.init(rawValue:)) {
+            self.transition = transition
+        }
+        if let quantize = defaults.string(forKey: SettingsKey.transitionQuantize).flatMap(TransitionQuantize.init(rawValue:)) {
+            transitionQuantize = quantize
+        }
         lyricsText = defaults.string(forKey: SettingsKey.lyricsText) ?? lyricsText
         isLyricsEnabled = defaults.bool(forKey: SettingsKey.lyricsEnabled)
     }
@@ -110,30 +144,75 @@ final class PerformanceState: ObservableObject {
         theme = themes[((index + offset) % themes.count + themes.count) % themes.count]
     }
 
-    // MARK: - Crossfade
+    // MARK: - Transitions
 
     var look: StageLook {
         StageLook(mode: mode, theme: theme, framesPerSecond: circleFramesPerSecond)
     }
 
+    /// The look the stage is headed for: the queued one, else the current one.
+    var targetLook: StageLook { queuedLook ?? look }
+
     /// The look stage layer `layer` shows, or nil if it's idle.
     func look(forStageLayer layer: Int) -> StageLook? {
-        layer == liveStageLayer ? look : fadingLook
+        layer == liveStageLayer ? look : handoff?.outgoingLook
     }
 
-    /// Runs `changes` and dissolves the stage from the old look to the new one
-    /// over `crossfadeDuration`, rather than cutting.
-    func crossfade(_ changes: () -> Void) {
-        crossfadeID += 1
-        let id = crossfadeID
-        withAnimation(.easeInOut(duration: Self.crossfadeDuration)) {
-            fadingLook = look
-            liveStageLayer = 1 - liveStageLayer
-            changes()
+    func switchMode(to mode: VisualMode, clock: BeatClock?) {
+        var target = targetLook
+        target.mode = mode
+        show(target, clock: clock)
+    }
+
+    /// Hands the stage over to `target` through `transition`: now, or, while
+    /// quantized and `clock` has a tempo, on its next beat or bar. A later
+    /// call replaces a queued look; asking for the current look cancels it.
+    func show(_ target: StageLook, clock: BeatClock?) {
+        queueTimer?.invalidate()
+        queueTimer = nil
+        guard target != look else {
+            queuedLook = nil
+            return
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.crossfadeDuration) { [weak self] in
-            guard let self, self.crossfadeID == id else { return }
-            self.fadingLook = nil
+        guard let clock, let delay = transitionQuantize.delay(untilNextStepOf: clock, at: BeatClock.now) else {
+            queuedLook = nil
+            startHandoff(to: target)
+            return
+        }
+        queuedLook = target
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            self?.showQueuedLookNow()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        queueTimer = timer
+    }
+
+    /// Lands the queued look without waiting for the beat.
+    func showQueuedLookNow() {
+        queueTimer?.invalidate()
+        queueTimer = nil
+        guard let target = queuedLook else { return }
+        queuedLook = nil
+        startHandoff(to: target)
+    }
+
+    private func startHandoff(to target: StageLook) {
+        handoffID += 1
+        let id = handoffID
+        let style = transition
+        if style.duration > 0 {
+            handoff = StageHandoff(outgoingLook: look, style: style, startTime: BeatClock.now, seed: UInt64(id))
+            liveStageLayer = 1 - liveStageLayer
+        } else {
+            handoff = nil
+        }
+        mode = target.mode
+        theme = target.theme
+        circleFramesPerSecond = target.framesPerSecond
+        guard style.duration > 0 else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + style.duration) { [weak self] in
+            guard let self, self.handoffID == id else { return }
+            self.handoff = nil
         }
     }
 
@@ -191,4 +270,89 @@ struct StageLook: Equatable {
     var mode: VisualMode
     var theme: ColorTheme
     var framesPerSecond: Int
+}
+
+/// How the stage hands over from one look to the next.
+enum StageTransition: String, CaseIterable, Identifiable {
+    case crossfade = "Fade"
+    case wipe = "Wipe"
+    case glitch = "Glitch"
+    case zoom = "Zoom"
+    case cut = "Cut"
+
+    var id: Self { self }
+
+    /// 0 cuts straight to the new look.
+    var duration: TimeInterval {
+        switch self {
+        case .crossfade: return PerformanceState.crossfadeDuration
+        case .wipe: return 0.6
+        case .glitch: return 0.4
+        case .zoom: return 0.6
+        case .cut: return 0
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .crossfade: return "Dissolve to the new look"
+        case .wipe: return "Wipe the new look in from the left"
+        case .glitch: return "Tear the new look in, band by band"
+        case .zoom: return "Zoom through the old look into the new one"
+        case .cut: return "Cut straight to the new look"
+        }
+    }
+}
+
+/// Which grid step a look change waits for.
+enum TransitionQuantize: String, CaseIterable, Identifiable {
+    case off = "Off"
+    case beat = "Beat"
+    case bar = "Bar"
+
+    var id: Self { self }
+
+    private var beatsPerStep: Double? {
+        switch self {
+        case .off: return nil
+        case .beat: return 1
+        case .bar: return 4
+        }
+    }
+
+    /// Seconds from `time` to the next beat or bar of `clock`, or nil to
+    /// switch now: unquantized, or just past a step. Bars start on multiples
+    /// of four beats, where a tap-tempo downbeat lands.
+    func delay(untilNextStepOf clock: BeatClock, at time: TimeInterval) -> TimeInterval? {
+        guard let beatsPerStep, clock.beatsPerSecond > 0 else { return nil }
+        let step = clock.beatPhase(at: time) / beatsPerStep
+        let secondsPerStep = beatsPerStep / clock.beatsPerSecond
+        let sinceStep = (step - step.rounded(.down)) * secondsPerStep
+        guard sinceStep >= PerformanceState.quantizeLateTolerance else { return nil }
+        return secondsPerStep - sinceStep
+    }
+}
+
+/// A transition in flight: what the outgoing layer shows and how it leaves.
+struct StageHandoff: Equatable {
+    var outgoingLook: StageLook
+    var style: StageTransition
+    /// `BeatClock.now` when it began.
+    var startTime: TimeInterval
+    /// Varies the glitch pattern from one handoff to the next.
+    var seed: UInt64
+
+    /// 0 at the start, 1 once the incoming look has fully taken over.
+    func progress(at time: TimeInterval) -> Double {
+        guard style.duration > 0 else { return 1 }
+        return min(1, max(0, (time - startTime) / style.duration))
+    }
+}
+
+extension AudioEngineManager {
+    /// The beat grid quantized look changes snap to, or nil while there's no
+    /// tempo to follow (stopped, or none detected or tapped yet).
+    var transitionClock: BeatClock? {
+        isRunning && bpm > 0 ? beatClock : nil
+    }
 }

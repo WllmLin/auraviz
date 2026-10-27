@@ -172,29 +172,167 @@ extension ColorTheme {
 }
 
 /// The stage for the shared performance look, so the preview and the output
-/// show the same thing. Each layer keeps its identity across a crossfade, so
-/// the outgoing look keeps animating while it fades out under (or over) the
-/// incoming one.
+/// show the same thing. Each layer keeps its identity (and its modifier
+/// chain) across a transition, so the outgoing look keeps animating while it
+/// hands over to the incoming one.
 struct PerformanceStage: View {
     let audio: AudioEngineManager
     @EnvironmentObject var performance: PerformanceState
 
     var body: some View {
-        ZStack {
-            layer(0)
-            layer(1)
+        let handoff = performance.handoff
+        TimelineView(.animation(paused: handoff == nil)) { timeline in
+            let progress = handoff?.progress(at: BeatClock.time(for: timeline.date)) ?? 1
+            ZStack {
+                layer(0, handoff: handoff, progress: progress)
+                layer(1, handoff: handoff, progress: progress)
+                if let handoff, handoff.style == .wipe {
+                    WipeEdge(position: StageLayerEffect.wipeEdge(progress), colors: performance.theme.orbColors)
+                        .zIndex(2)
+                }
+            }
         }
     }
 
     @ViewBuilder
-    private func layer(_ index: Int) -> some View {
+    private func layer(_ index: Int, handoff: StageHandoff?, progress: Double) -> some View {
         if let look = performance.look(forStageLayer: index) {
-            // Both layers show the current lyrics, so a crossfade only
+            let isIncoming = index == performance.liveStageLayer
+            let effect = StageLayerEffect(handoff: handoff, progress: progress, isIncoming: isIncoming)
+            // Both layers show the current lyrics, so a transition only
             // recolors them.
             VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics)
-                .opacity(index == performance.liveStageLayer ? 1 : 0)
-                .transition(.opacity)
+                .scaleEffect(effect.scale)
+                .visualEffect { content, proxy in
+                    content.offset(x: effect.offset * proxy.size.width)
+                }
+                .clipShape(StageClip(spans: effect.spans, axis: effect.clipAxis))
+                .opacity(effect.opacity)
+                .zIndex(isIncoming ? 1 : 0)
         }
+    }
+}
+
+/// How one stage layer looks at a point in a handoff. Idle, it's the plain
+/// layer: full size and opacity, unclipped, in place.
+struct StageLayerEffect {
+    var scale: CGFloat = 1
+    /// Horizontal shift as a fraction of the stage width.
+    var offset: CGFloat = 0
+    var opacity: Double = 1
+    /// The fractions of the stage, along `clipAxis`, the layer shows.
+    var spans: [ClosedRange<CGFloat>] = [0...1]
+    var clipAxis: Axis = .horizontal
+
+    private static let glitchBandCount = 14
+    /// Jitter steps per second; displacement only, so the glitch doesn't
+    /// flash (see `PerformanceState.strobeMinimumInterval`).
+    private static let glitchJitterRate = 30.0
+
+    init(handoff: StageHandoff?, progress p: Double, isIncoming: Bool) {
+        guard let handoff else { return }
+        let eased = CGFloat(p * p * (3 - 2 * p))
+        switch handoff.style {
+        case .crossfade:
+            opacity = Double(isIncoming ? eased : 1 - eased)
+        case .wipe:
+            let edge = Self.wipeEdge(p)
+            spans = isIncoming ? [0...edge] : [edge...1]
+        case .zoom:
+            // Flies through the old look as the new one rises up behind it.
+            scale = isIncoming ? 0.6 + 0.4 * eased : 1 + 1.4 * eased
+            opacity = Double(isIncoming ? eased : 1 - eased)
+        case .glitch:
+            spans = Self.glitchBands(progress: p, seed: handoff.seed, isIncoming: isIncoming)
+            clipAxis = .vertical
+            // Each layer tears sideways on its own, strongest mid-transition.
+            let step = Int((p * handoff.style.duration * Self.glitchJitterRate).rounded(.down))
+            let layerSeed = handoff.seed &* 2 &+ (isIncoming ? 1 : 0)
+            let jitter = Self.noise(step, layerSeed) * 2 - 1
+            offset = CGFloat(0.06 * sin(.pi * p) * jitter)
+        case .cut:
+            break
+        }
+    }
+
+    /// Where the wipe's edge is, as a fraction of the stage width.
+    static func wipeEdge(_ p: Double) -> CGFloat {
+        CGFloat(p * p * (3 - 2 * p))
+    }
+
+    /// Horizontal bands of uneven height, each switching to the incoming look
+    /// once at its own random moment (all by 80 %), so the handoff tears in
+    /// without flickering back.
+    private static func glitchBands(progress p: Double, seed: UInt64, isIncoming: Bool) -> [ClosedRange<CGFloat>] {
+        let weights = (0..<glitchBandCount).map { 0.3 + noise($0, seed) }
+        let total = weights.reduce(0, +)
+        var spans: [ClosedRange<CGFloat>] = []
+        var top = 0.0
+        for (index, weight) in weights.enumerated() {
+            let bottom = index == glitchBandCount - 1 ? 1 : top + weight / total
+            let switched = p >= 0.8 * noise(index, seed &+ 0x9E37_79B9)
+            if switched == isIncoming { spans.append(CGFloat(top)...CGFloat(bottom)) }
+            top = bottom
+        }
+        return spans
+    }
+
+    /// Deterministic 0..<1 noise (SplitMix64), so the preview and the output
+    /// draw the same glitch.
+    private static func noise(_ index: Int, _ seed: UInt64) -> Double {
+        var z = seed &+ UInt64(bitPattern: Int64(index)) &* 0x9E37_79B9_7F4A_7C15
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        z ^= z >> 31
+        return Double(z >> 11) / Double(1 << 53)
+    }
+}
+
+/// The spans of the stage a layer shows: columns across a horizontal axis,
+/// rows down a vertical one.
+struct StageClip: Shape {
+    var spans: [ClosedRange<CGFloat>]
+    var axis: Axis
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        for span in spans {
+            switch axis {
+            case .horizontal:
+                path.addRect(CGRect(x: rect.minX + rect.width * span.lowerBound, y: rect.minY, width: rect.width * (span.upperBound - span.lowerBound), height: rect.height))
+            case .vertical:
+                path.addRect(CGRect(x: rect.minX, y: rect.minY + rect.height * span.lowerBound, width: rect.width, height: rect.height * (span.upperBound - span.lowerBound)))
+            }
+        }
+        return path
+    }
+}
+
+/// A glowing theme-colored line along the wipe's edge, hiding the seam
+/// between the two looks.
+private struct WipeEdge: View {
+    /// Fraction of the stage width.
+    var position: CGFloat
+    var colors: [Color]
+
+    var body: some View {
+        Canvas { context, size in
+            let scale = size.visualizerScale
+            let x = size.width * position
+            let glowWidth = 28 * scale
+            let color = colors.first ?? .white
+            context.fill(
+                Path(CGRect(x: x - glowWidth / 2, y: 0, width: glowWidth, height: size.height)),
+                with: .linearGradient(
+                    Gradient(colors: [color.opacity(0), color.opacity(0.75), color.opacity(0)]),
+                    startPoint: CGPoint(x: x - glowWidth / 2, y: 0),
+                    endPoint: CGPoint(x: x + glowWidth / 2, y: 0)
+                )
+            )
+            context.fill(Path(CGRect(x: x - scale, y: 0, width: 2 * scale, height: size.height)), with: .color(.white.opacity(0.9)))
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

@@ -116,6 +116,9 @@ struct ContentView: View {
                     if performance.isBlackedOut {
                         blackoutBadge
                     }
+                    if let queuedLook = performance.queuedLook {
+                        queuedBadge(queuedLook)
+                    }
                     Spacer()
                     if performance.mode == .circle {
                         fpsButton
@@ -226,7 +229,11 @@ struct ContentView: View {
     }
 
     private func modePicker(showsLabels: Bool) -> some View {
-        Picker("Mode", selection: $performance.mode) {
+        // Shows the queued mode while a quantized switch waits for its beat.
+        Picker("Mode", selection: Binding(
+            get: { performance.targetLook.mode },
+            set: { performance.switchMode(to: $0, clock: audio.transitionClock) }
+        )) {
             ForEach(VisualMode.allCases) { m in
                 Group {
                     if showsLabels {
@@ -299,6 +306,9 @@ struct ContentView: View {
                     }
                     if performance.isBlackedOut {
                         blackoutBadge
+                    }
+                    if let queuedLook = performance.queuedLook {
+                        queuedBadge(queuedLook)
                     }
                     Spacer()
                     if performance.mode == .circle {
@@ -473,6 +483,25 @@ struct ContentView: View {
         .accessibilityHint("Brings the stage back")
     }
 
+    /// A quantized switch waiting for its beat or bar; clicking lands it now.
+    private func queuedBadge(_ look: StageLook) -> some View {
+        Button {
+            performance.showQueuedLookNow()
+        } label: {
+            Text("CUED \(look.mode.rawValue.uppercased()) · NEXT \(performance.transitionQuantize.rawValue.uppercased())")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(performance.theme.gradient.first!.opacity(0.45), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Switching to \(look.mode.rawValue) on the next \(performance.transitionQuantize.rawValue.lowercased()). Click to switch now.")
+        .accessibilityLabel("\(look.mode.rawValue) cued for the next \(performance.transitionQuantize.rawValue.lowercased())")
+        .accessibilityHint("Switches now")
+    }
+
     private var shortcutsButton: some View {
         chromeButton(icon: "questionmark", help: "Keyboard shortcuts (⌘/)") {
             performance.isShowingShortcuts.toggle()
@@ -591,10 +620,44 @@ struct ContentView: View {
 
             Divider().overlay(.white.opacity(0.08))
 
+            transitionControl
+
             lyricsControl
         }
         .padding(16)
         .glassCard()
+    }
+
+    /// How mode switches and preset recalls hand over, and whether they wait
+    /// for the beat grid.
+    private var transitionControl: some View {
+        HStack(spacing: 10) {
+            Label("Transition", systemImage: "rectangle.righthalf.inset.filled.arrow.right")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Picker("Transition", selection: $performance.transition) {
+                ForEach(StageTransition.allCases) { style in
+                    Text(style.rawValue).tag(style).help(style.help)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("How mode switches and preset recalls hand over: \(performance.transition.help.lowercased())")
+            Spacer(minLength: 12)
+            Label("Quantize", systemImage: "metronome")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Picker("Quantize", selection: $performance.transitionQuantize) {
+                ForEach(TransitionQuantize.allCases) { quantize in
+                    Text(quantize.rawValue).tag(quantize)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .help("Wait for the next beat or bar to switch. Needs a tempo: detected, or tapped with B. Without one, switches happen at once.")
+        }
     }
 
     private var lyricsControl: some View {

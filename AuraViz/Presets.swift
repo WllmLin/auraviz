@@ -15,6 +15,8 @@ enum SettingsKey {
     static let drumReactivity = "drumReactivity"
     static let lyricsText = "lyricsText"
     static let lyricsEnabled = "lyricsEnabled"
+    static let stageTransition = "stageTransition"
+    static let transitionQuantize = "transitionQuantize"
 }
 
 extension UserDefaults {
@@ -80,15 +82,16 @@ extension Preset {
         drumReactivity = try? container.decode(DrumReactivity.self, forKey: .drumReactivity)
     }
 
-    /// Crossfades the stage to this preset's look and sets its controls.
+    /// Hands the stage over to this preset's look, through the chosen
+    /// transition and quantize, and sets its controls at once.
     func apply(to audio: AudioEngineManager, performance: PerformanceState) {
-        performance.crossfade {
-            performance.mode = mode
-            performance.theme = theme
-            if PerformanceState.circleFrameRates.contains(circleFramesPerSecond) {
-                performance.circleFramesPerSecond = circleFramesPerSecond
-            }
+        var look = performance.targetLook
+        look.mode = mode
+        look.theme = theme
+        if PerformanceState.circleFrameRates.contains(circleFramesPerSecond) {
+            look.framesPerSecond = circleFramesPerSecond
         }
+        performance.show(look, clock: audio.transitionClock)
         audio.sensitivity = sensitivity.clamped(to: AudioEngineManager.sensitivityRange)
         audio.autoGainEnabled = autoGainEnabled
         audio.smoothing = smoothing.clamped(to: AudioEngineManager.smoothingRange)
