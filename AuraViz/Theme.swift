@@ -18,6 +18,25 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
         case .laser: return "laser.burst"
         }
     }
+
+    /// What each mode does with the drums, tuned so its signature effect
+    /// leads: Circle kicks a shockwave, snares flare the rim and hats twinkle
+    /// the LED ring; Waves lifts its low, mid and high layers; Bars bounce on
+    /// kicks, gloss on snares and glint their caps on hats; Tunnel breathes on
+    /// kicks, lights its rails on snares and sparks its corners on hats;
+    /// Particles swell the core on kicks, fire a ring on snares and twinkle on
+    /// hats; Laser punches its apertures on kicks, opens its fans on snares
+    /// and shimmers its beams on hats.
+    var defaultDrumReactivity: DrumReactivity {
+        switch self {
+        case .circle: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
+        case .waves: return DrumReactivity(kick: 0.8, snare: 0.6, hat: 0.8)
+        case .y2k: return DrumReactivity(kick: 0.7, snare: 0.7, hat: 0.8)
+        case .tunnel: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
+        case .particles: return DrumReactivity(kick: 0.8, snare: 0.9, hat: 1)
+        case .laser: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
+        }
+    }
 }
 
 enum ColorTheme: String, CaseIterable, Identifiable, Codable {

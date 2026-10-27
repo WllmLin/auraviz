@@ -27,6 +27,150 @@ struct BeatClock {
     }
 }
 
+/// Drum voices, told apart by the band their transient lands in.
+enum DrumInstrument: String, CaseIterable, Identifiable, Codable {
+    case kick = "Kick"
+    case snare = "Snare"
+    case hat = "Hat"
+
+    var id: String { rawValue }
+
+    /// Analysis band in Hz: the kick's low thump, the snare's mid crack (body
+    /// overtones, stick and wires) and the hat's high sizzle.
+    var band: ClosedRange<Double> {
+        switch self {
+        case .kick: return 40...150
+        case .snare: return 250...5_000
+        case .hat: return 6_000...16_000
+        }
+    }
+
+    /// Shortest gap between two detected hits.
+    var minimumInterval: TimeInterval {
+        switch self {
+        case .kick, .snare: return 0.1
+        // Room for 16ths at 175 BPM.
+        case .hat: return 0.06
+        }
+    }
+
+    /// Decay of the hit pulse and the activity envelope.
+    var releaseTime: TimeInterval {
+        switch self {
+        case .kick: return 0.15
+        case .snare: return 0.12
+        case .hat: return 0.07
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .kick: return "circle.circle.fill"
+        case .snare: return "burst.fill"
+        case .hat: return "sparkle"
+        }
+    }
+
+    var character: String {
+        switch self {
+        case .kick: return "low thump"
+        case .snare: return "mid crack"
+        case .hat: return "high sizzle"
+        }
+    }
+}
+
+/// One drum voice as of the last analysis. Like the beat, hits are counted so
+/// views that animate between published frames can watch `hitCount` and
+/// `lastHitTime` without missing one.
+struct DrumHits {
+    var instrument: DrumInstrument
+    var hitCount = 0
+    var lastHitTime: TimeInterval = -.infinity
+    /// 0.1-1, how far the last hit rose above the band's recent flux.
+    var strength: CGFloat = 0
+    /// Transient activity in the band relative to its recent peak, 0-1:
+    /// instant attack, exponential release. Follows open hats and rolls that
+    /// don't separate into hits.
+    var envelope: CGFloat = 0
+    var analysisTime: TimeInterval = 0
+
+    /// The envelope decayed to `time`, for animating between analyses.
+    func envelope(at time: TimeInterval) -> CGFloat {
+        envelope * CGFloat(exp(-max(0, time - analysisTime) / instrument.releaseTime))
+    }
+
+    /// Seconds since the last hit; infinite before the first one.
+    func hitAge(at time: TimeInterval) -> TimeInterval {
+        max(0, time - lastHitTime)
+    }
+
+    /// 0-1 pulse on each hit, decaying over the voice's release time and
+    /// scaled by how hard it hit.
+    func pulse(at time: TimeInterval) -> Double {
+        exp(-hitAge(at: time) / instrument.releaseTime) * (0.4 + 0.6 * Double(strength))
+    }
+
+    /// A stable pseudo-random 0..<1 for element `index` that changes with every
+    /// hit, so each hit can light a different scatter of elements.
+    func scatter(_ index: Int) -> Double {
+        var x = UInt64(truncatingIfNeeded: index) &* 0x9E37_79B9_7F4A_7C15
+            ^ UInt64(truncatingIfNeeded: hitCount) &* 0xBF58_476D_1CE4_E5B9
+        x ^= x >> 31
+        x = x &* 0x94D0_49BB_1331_11EB
+        x ^= x >> 29
+        return Double(x >> 11) / Double(1 << 53)
+    }
+}
+
+/// How strongly a visualizer answers each drum voice, each 0-1. Visualizers
+/// multiply these by the master beat reactivity, so 0 there still means
+/// volume-only visuals.
+struct DrumReactivity: Codable, Equatable {
+    static let range: ClosedRange<Double> = 0...1
+    static let off = DrumReactivity(kick: 0, snare: 0, hat: 0)
+
+    var kick = 1.0
+    var snare = 1.0
+    var hat = 1.0
+
+    subscript(instrument: DrumInstrument) -> Double {
+        get {
+            switch instrument {
+            case .kick: return kick
+            case .snare: return snare
+            case .hat: return hat
+            }
+        }
+        set {
+            switch instrument {
+            case .kick: kick = newValue
+            case .snare: snare = newValue
+            case .hat: hat = newValue
+            }
+        }
+    }
+
+    func clamped() -> DrumReactivity {
+        DrumReactivity(kick: kick.clamped(to: Self.range), snare: snare.clamped(to: Self.range), hat: hat.clamped(to: Self.range))
+    }
+
+    /// The effect amounts a visualizer applies under the master reactivity.
+    func scaled(by beatReactivity: Double) -> DrumReactivity {
+        DrumReactivity(kick: kick * beatReactivity, snare: snare * beatReactivity, hat: hat * beatReactivity)
+    }
+}
+
+extension DrumReactivity {
+    /// Missing values fall back to full reactivity.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        kick = try container.decodeIfPresent(Double.self, forKey: .kick) ?? 1
+        snare = try container.decodeIfPresent(Double.self, forKey: .snare) ?? 1
+        hat = try container.decodeIfPresent(Double.self, forKey: .hat) ?? 1
+    }
+}
+
 struct BeatAnalysis {
     /// True on the published frame that includes a beat detection (frames are
     /// coalesced to display rate). Views that animate between published frames
@@ -42,6 +186,19 @@ struct BeatAnalysis {
     var bassEnvelope: CGFloat = 0
     var analysisTime: TimeInterval = 0
     var clock = BeatClock()
+    /// Per-voice onsets, independent of the beat grid: the beat above is the
+    /// tempo-validated pulse, these fire on every hit in their band.
+    var kick = DrumHits(instrument: .kick)
+    var snare = DrumHits(instrument: .snare)
+    var hat = DrumHits(instrument: .hat)
+
+    subscript(instrument: DrumInstrument) -> DrumHits {
+        switch instrument {
+        case .kick: return kick
+        case .snare: return snare
+        case .hat: return hat
+        }
+    }
 
     /// The bass envelope decayed to `time`, for animating between analyses.
     func bassEnvelope(at time: TimeInterval) -> CGFloat {
@@ -103,9 +260,31 @@ final class BeatSyncedPhase {
     }
 }
 
+/// A drum voice's hit pulse for effects that brighten a large area. Hits
+/// closer than `PerformanceState.strobeMinimumInterval` to the last accepted
+/// one are skipped, holding the effect to the 3 Hz strobe cap however fast
+/// the drummer plays. A class so it can advance inside a `TimelineView`
+/// update without invalidating SwiftUI state.
+final class RateLimitedDrumPulse {
+    private var hitTime: TimeInterval = -.infinity
+    private var strength = 0.0
+    private var lastHitCount: Int?
+
+    func advance(to time: TimeInterval, hits: DrumHits) -> Double {
+        if let lastHitCount, hits.hitCount != lastHitCount,
+           hits.lastHitTime - hitTime >= PerformanceState.strobeMinimumInterval {
+            hitTime = hits.lastHitTime
+            strength = Double(hits.strength)
+        }
+        lastHitCount = hits.hitCount
+        return exp(-max(0, time - hitTime) / hits.instrument.releaseTime) * (0.4 + 0.6 * strength)
+    }
+}
+
 /// Low-band onset detection, inter-onset-interval tempo estimation and a
-/// phase-locked beat grid. Used only from the audio processing queue; all
-/// storage is preallocated so the per-frame path does not allocate.
+/// phase-locked beat grid, plus per-band kick / snare / hat onsets. Used only
+/// from the audio processing queue; all storage is preallocated so the
+/// per-frame path does not allocate.
 final class BeatTracker {
     static let bassReleaseTime: TimeInterval = 0.12
 
@@ -136,6 +315,31 @@ final class BeatTracker {
     private var lastBeatStrength: Float = 0
     private var onsetBaselineEnergy: Float = 0
     private var beatCount = 0
+
+    // Drum voices: power rise over each voice's FFT bins. A kick's beater
+    // click reaches the snare band, a snare's body the kick band and its
+    // wires the hat band. While one voice hits, a neighbor only counts a hit
+    // if its rise beats that leakage, as a ratio of the two voices' rises
+    // (level-independent, since both scale with the gain).
+    private let kickClickInSnare: Float = 8e-4
+    private let snareBodyInKick: Float = 40
+    private let snareWiresInHat: Float = 1
+    private var kickDetector = DrumOnsetDetector(instrument: .kick)
+    private var snareDetector = DrumOnsetDetector(instrument: .snare)
+    private var hatDetector = DrumOnsetDetector(instrument: .hat)
+    // Power of the previous frame's bins, for the rise.
+    private var previousPower = [Float](repeating: 0, count: 2048)
+    private var hasPreviousPower = false
+    private var drumSampleRate: Double = 0
+    // Rises are measured against the program level: mean bin power followed
+    // fast up and slowly down (the auto gain's time constants), so detection
+    // doesn't depend on the source level, sensitivity or auto gain.
+    private let programAttackTime: TimeInterval = 0.15
+    private let programReleaseTime: TimeInterval = 9
+    /// About -100 dB per bin; silence never becomes the reference.
+    private let minimumProgramPower: Float = 1e-10
+    private var programPower: Float = 0
+    private let drumReferenceHopDuration: TimeInterval = 512.0 / 48_000
 
     // Tempo: pairwise onset intervals vote into a one-octave log histogram
     // (90-180 BPM), so intervals of 1, 2 and 4 beats reinforce the same bin.
@@ -201,8 +405,13 @@ final class BeatTracker {
         energyCount = 0
         previousEnergy = 0
         hasPreviousBands = false
+        hasPreviousPower = false
+        programPower = 0
         bassEnvelope = 0
         lastAnalysisTime = 0
+        kickDetector.resetSignalState()
+        snareDetector.resetSignalState()
+        hatDetector.resetSignalState()
     }
 
     // MARK: - Analysis
@@ -211,11 +420,14 @@ final class BeatTracker {
     ///   - bassEnergy: Sum of squared FFT magnitudes in the ~40-150 Hz bins.
     ///   - bassLevel: The same band as a 0-1 display level.
     ///   - bands: Unsmoothed per-band levels for spectral flux.
+    ///   - magnitudes: Unscaled FFT bin magnitudes, DC first, for the drum
+    ///     voices.
     ///   - advancedSampleCount: New samples since the previous analysis.
     func analyze(
         bassEnergy: Float,
         bassLevel: Float,
         bands: [Float],
+        magnitudes: [Float],
         advancedSampleCount: Int,
         sampleRate: Double,
         arrivalTime: TimeInterval
@@ -291,6 +503,14 @@ final class BeatTracker {
         energyCount = min(energyCapacity, energyCount + 1)
         previousEnergy = bassEnergy
 
+        analyzeDrums(
+            magnitudes: magnitudes,
+            advancedSampleCount: advancedSampleCount,
+            sampleRate: sampleRate,
+            now: now,
+            elapsed: elapsed
+        )
+
         advancePhase(to: now)
         if isBeat {
             recordOnset(at: now, strength: lastBeatStrength)
@@ -340,6 +560,74 @@ final class BeatTracker {
         updatePhaseRate()
 
         return snapshot(isBeat: false, onsetFlux: 0, analysisTime: lastAnalysisTime)
+    }
+
+    // MARK: - Drums
+
+    private func analyzeDrums(
+        magnitudes: [Float],
+        advancedSampleCount: Int,
+        sampleRate: Double,
+        now: TimeInterval,
+        elapsed: TimeInterval
+    ) {
+        let binCount = min(magnitudes.count, previousPower.count)
+        if sampleRate != drumSampleRate {
+            // Bins are sampleRate / (2 * count) apart.
+            let binWidth = sampleRate / Double(2 * magnitudes.count)
+            kickDetector.setBins(binWidth: binWidth, binCount: binCount)
+            snareDetector.setBins(binWidth: binWidth, binCount: binCount)
+            hatDetector.setBins(binWidth: binWidth, binCount: binCount)
+            drumSampleRate = sampleRate
+            hasPreviousPower = false
+        }
+
+        var kick: Float = 0
+        var snare: Float = 0
+        var hat: Float = 0
+        if hasPreviousPower {
+            // Rises grow with the new audio between frames, so they're scaled
+            // to a 512-sample hop at 48 kHz. Sub-linearly: once a hop spans a
+            // whole hit (the microphone path analyzes 4096-sample buffers),
+            // the rise stops growing with it.
+            let hopDuration = Double(max(1, advancedSampleCount)) / sampleRate
+            let reference = max(programPower, minimumProgramPower) * Float(pow(hopDuration / drumReferenceHopDuration, 0.75))
+            kick = kickDetector.onsetFunction(magnitudes, previousPower: previousPower, reference: reference)
+            snare = snareDetector.onsetFunction(magnitudes, previousPower: previousPower, reference: reference)
+            hat = hatDetector.onsetFunction(magnitudes, previousPower: previousPower, reference: reference)
+        }
+        var totalPower: Float = 0
+        for bin in 0..<binCount {
+            let power = magnitudes[bin] * magnitudes[bin]
+            previousPower[bin] = power
+            totalPower += power
+        }
+        hasPreviousPower = true
+        let level = totalPower / Float(max(1, binCount))
+        if programPower == 0 {
+            programPower = level
+        } else {
+            let time = level > programPower ? programAttackTime : programReleaseTime
+            programPower += (level - programPower) * Float(1 - exp(-elapsed / time))
+        }
+
+        // Every voice's threshold comes from its own history before this
+        // frame, so all three are measured before any is updated.
+        let kickExcess = kickDetector.measure(onset: kick, now: now)
+        let snareExcess = snareDetector.measure(onset: snare, now: now)
+        _ = hatDetector.measure(onset: hat, now: now)
+        kickDetector.update(
+            onset: kick, now: now, elapsed: elapsed,
+            isMasked: snareExcess > 1 && kick < snare * snareBodyInKick
+        )
+        snareDetector.update(
+            onset: snare, now: now, elapsed: elapsed,
+            isMasked: kickExcess > 1 && snare < kick * kickClickInSnare
+        )
+        hatDetector.update(
+            onset: hat, now: now, elapsed: elapsed,
+            isMasked: snareExcess > 1 && hat < snare * snareWiresInHat
+        )
     }
 
     // MARK: - Tempo
@@ -588,7 +876,204 @@ final class BeatTracker {
                 anchorTime: phaseAnchorTime,
                 anchorPhase: phaseAnchorValue,
                 beatsPerSecond: phaseRate
-            )
+            ),
+            kick: kickDetector.hits(analysisTime: lastAnalysisTime),
+            snare: snareDetector.hits(analysisTime: lastAnalysisTime),
+            hat: hatDetector.hits(analysisTime: lastAnalysisTime)
         )
+    }
+}
+
+/// Onset detection for one drum voice. The detection function is the rise
+/// in power across the voice's FFT bins since the previous frame, so steady
+/// tones and the noise floor stay quiet. Snares and hats are noise, which
+/// lifts most of their bins at once, while a sung or played note lifts only
+/// its harmonics; for those voices the rise is weighted by the share of bins
+/// that rose. Rises are relative to the program level, so a hit is a rising
+/// detection function above a fixed floor and well above its median over
+/// the last second, which the other voices' hits barely move. Used only from
+/// the audio processing queue; all storage is preallocated.
+struct DrumOnsetDetector {
+    let instrument: DrumInstrument
+
+    private static let historyDuration: TimeInterval = 1.0
+    // Holds `historyDuration` at ~94 analyses per second.
+    private static let historyCapacity = 256
+    private static let medianRatio: Float = 4
+    /// A bin counts as rising above this power ratio (about 1 dB), unless
+    /// it's still 60 dB under the program level: between the harmonics of a
+    /// clean synth, rounding noise rises too.
+    private static let risingRatio: Float = 1.26
+    private static let minimumBinLevel: Float = 1e-6
+    /// Snare and hat onsets count from this share of rising bins and at full
+    /// weight from `hitBreadth`.
+    private static let noiseBreadth: Float = 0.6
+    private static let hitBreadth: Float = 0.9
+    /// A hit keeps entering the FFT window for a few hops; strength tracks
+    /// the rising onset for this long after it.
+    private static let strengthPeakWindow: TimeInterval = 0.06
+    /// The envelope is the onset over a peak that falls off this slowly.
+    private static let peakReleaseTime: TimeInterval = 3
+
+    private var bins = 0..<0
+    private var history = [Float](repeating: 0, count: 256)
+    private var historyTimes = [TimeInterval](repeating: 0, count: 256)
+    private var medianScratch = [Float](repeating: 0, count: 256)
+    private var writeIndex = 0
+    private var count = 0
+    private var previousOnset: Float = 0
+    private var median: Float = 0
+    private var threshold: Float = .infinity
+    private var peakOnset: Float = 0
+    private var envelope: Float = 0
+    private var hitCount = 0
+    private var lastHitTime: TimeInterval = -.infinity
+    private var strength: Float = 0
+
+    /// Mean power rise per bin, relative to the program level, a hit must
+    /// reach. Leakage from the other voices (a kick's click in the snare band,
+    /// a snare's wires in the hat band) and the noise floor stay below it.
+    private let minimumOnset: Float
+
+    init(instrument: DrumInstrument) {
+        self.instrument = instrument
+        switch instrument {
+        case .kick: minimumOnset = 15
+        case .snare: minimumOnset = 0.04
+        case .hat: minimumOnset = 3e-4
+        }
+    }
+
+    /// Keeps the hit count and last hit, so a restarted stream doesn't
+    /// replay a hit to views that watch the count.
+    mutating func resetSignalState() {
+        writeIndex = 0
+        count = 0
+        previousOnset = 0
+        median = 0
+        threshold = .infinity
+        peakOnset = 0
+        envelope = 0
+    }
+
+    mutating func setBins(binWidth: Double, binCount: Int) {
+        let lower = min(binCount, max(1, Int((instrument.band.lowerBound / binWidth).rounded())))
+        let upper = min(binCount, Int((instrument.band.upperBound / binWidth).rounded()) + 1)
+        bins = lower..<max(lower, upper)
+    }
+
+    /// The voice's detection function for this frame.
+    /// - Parameter reference: The program level as mean power per bin,
+    ///   scaled to the analysis hop.
+    func onsetFunction(_ magnitudes: [Float], previousPower: [Float], reference: Float) -> Float {
+        guard !bins.isEmpty else { return 0 }
+        let minimumBinPower = reference * Self.minimumBinLevel
+        var rise: Float = 0
+        var risingBins = 0
+        for bin in bins {
+            let power = magnitudes[bin] * magnitudes[bin]
+            let previous = previousPower[bin]
+            rise += max(0, power - previous)
+            if power > previous * Self.risingRatio, power > minimumBinPower { risingBins += 1 }
+        }
+        let onset = rise / Float(bins.count) / reference
+        guard instrument != .kick else { return onset }
+        // About a third of a noise floor's bins rise from frame to frame by
+        // chance and a note change lifts up to about 0.75; a snare or hat
+        // hit lifts nearly all of them.
+        let breadth = Float(risingBins) / Float(bins.count)
+        let weight = min(1, max(0, (breadth - Self.noiseBreadth) / (Self.hitBreadth - Self.noiseBreadth)))
+        return onset * weight * weight
+    }
+
+    /// Updates the threshold from the history before this frame and returns
+    /// how far `onset` exceeds it (above 1 is a hit, unmasked).
+    mutating func measure(onset: Float, now: TimeInterval) -> Float {
+        var used = 0
+        for offset in 0..<count {
+            let index = historyIndex(offset)
+            guard now - historyTimes[index] <= Self.historyDuration else { break }
+            medianScratch[used] = history[index]
+            used += 1
+        }
+        guard used >= 4 else {
+            threshold = .infinity
+            return 0
+        }
+        median = Self.select(used / 2, in: &medianScratch, count: used)
+        threshold = max(median * Self.medianRatio, minimumOnset)
+        return onset / threshold
+    }
+
+    /// Detects a hit against the threshold from `measure`, unless a
+    /// neighboring voice's hit masks this one, and records the frame.
+    mutating func update(onset: Float, now: TimeInterval, elapsed: TimeInterval, isMasked: Bool) {
+        if !isMasked, onset > threshold, onset > previousOnset, now - lastHitTime >= instrument.minimumInterval {
+            hitCount += 1
+            lastHitTime = now
+            strength = hitStrength(forOnset: onset)
+        } else if now - lastHitTime < Self.strengthPeakWindow, onset > previousOnset {
+            strength = max(strength, hitStrength(forOnset: onset))
+        }
+
+        peakOnset = max(onset, peakOnset * Float(exp(-elapsed / Self.peakReleaseTime)), minimumOnset * 4)
+        let level = min(1, max(0, (onset - median) / max(peakOnset - median, minimumOnset)))
+        envelope = max(level, envelope * Float(exp(-elapsed / instrument.releaseTime)))
+
+        history[writeIndex] = onset
+        historyTimes[writeIndex] = now
+        writeIndex = (writeIndex + 1) % Self.historyCapacity
+        count = min(Self.historyCapacity, count + 1)
+        previousOnset = onset
+    }
+
+    func hits(analysisTime: TimeInterval) -> DrumHits {
+        DrumHits(
+            instrument: instrument,
+            hitCount: hitCount,
+            lastHitTime: lastHitTime,
+            strength: CGFloat(strength),
+            envelope: CGFloat(envelope),
+            analysisTime: analysisTime
+        )
+    }
+
+    /// Ring index of the `offset`-th most recent frame.
+    private func historyIndex(_ offset: Int) -> Int {
+        (writeIndex - 1 - offset + Self.historyCapacity) % Self.historyCapacity
+    }
+
+    /// 0.1 at the threshold, 1 about 12 dB over it.
+    private func hitStrength(forOnset onset: Float) -> Float {
+        min(1, max(0.1, 0.1 + log2(onset / threshold) / 4.5))
+    }
+
+    /// The `k`-th smallest of `values[0..<count]`, partially reordering them
+    /// (quickselect, so the median costs no allocation or full sort).
+    private static func select(_ k: Int, in values: inout [Float], count: Int) -> Float {
+        var low = 0
+        var high = count - 1
+        while low < high {
+            let pivot = values[(low + high) / 2]
+            var i = low
+            var j = high
+            while i <= j {
+                while values[i] < pivot { i += 1 }
+                while values[j] > pivot { j -= 1 }
+                if i <= j {
+                    values.swapAt(i, j)
+                    i += 1
+                    j -= 1
+                }
+            }
+            if k <= j {
+                high = j
+            } else if k >= i {
+                low = i
+            } else {
+                break
+            }
+        }
+        return values[k]
     }
 }

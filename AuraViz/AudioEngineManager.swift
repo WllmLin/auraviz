@@ -162,6 +162,15 @@ final class AudioEngineManager: NSObject, ObservableObject {
     @Published var beatReactivity: Double = 0.6 {
         didSet { UserDefaults.standard.set(beatReactivity, forKey: SettingsKey.beatReactivity) }
     }
+    /// Per-visualizer drum reactivity, keyed by `VisualMode.rawValue`. Modes
+    /// without an entry use their defaults. Read through `drumReactivity(for:)`.
+    @Published private var drumReactivityByMode: [String: DrumReactivity] = [:] {
+        didSet {
+            if let data = try? JSONEncoder().encode(drumReactivityByMode) {
+                UserDefaults.standard.set(data, forKey: SettingsKey.drumReactivity)
+            }
+        }
+    }
     @Published var micPermissionGranted = false
     @Published var systemAudioPermissionGranted = false
 
@@ -188,6 +197,27 @@ final class AudioEngineManager: NSObject, ObservableObject {
 
     func bassEnvelope(at time: TimeInterval) -> CGFloat {
         visualization.beat.bassEnvelope(at: time)
+    }
+
+    // Drum voices, split by band: kick (low thump), snare (mid crack) and hat
+    // (high sizzle). Watch `hitCount` like `beatCount`; `pulse(at:)` and
+    // `envelope(at:)` animate between frames.
+    var kick: DrumHits { visualization.beat.kick }
+    var snare: DrumHits { visualization.beat.snare }
+    var hat: DrumHits { visualization.beat.hat }
+
+    func hits(for instrument: DrumInstrument) -> DrumHits {
+        visualization.beat[instrument]
+    }
+
+    /// How strongly `mode` answers each drum voice, before the master beat
+    /// reactivity scales it.
+    func drumReactivity(for mode: VisualMode) -> DrumReactivity {
+        drumReactivityByMode[mode.rawValue] ?? mode.defaultDrumReactivity
+    }
+
+    func setDrumReactivity(_ reactivity: DrumReactivity, for mode: VisualMode) {
+        drumReactivityByMode[mode.rawValue] = reactivity.clamped()
     }
 
     private var microphoneEngine: AVAudioEngine?
@@ -288,6 +318,10 @@ final class AudioEngineManager: NSObject, ObservableObject {
         autoGainEnabled = defaults.object(forKey: SettingsKey.autoGainEnabled) as? Bool ?? autoGainEnabled
         smoothing = defaults.double(forKey: SettingsKey.smoothing, in: Self.smoothingRange) ?? smoothing
         beatReactivity = defaults.double(forKey: SettingsKey.beatReactivity, in: Self.beatReactivityRange) ?? beatReactivity
+        if let data = defaults.data(forKey: SettingsKey.drumReactivity),
+           let stored = try? JSONDecoder().decode([String: DrumReactivity].self, from: data) {
+            drumReactivityByMode = stored.mapValues { $0.clamped() }
+        }
     }
 
     private func setupFFT() {
@@ -362,6 +396,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         sensitivity = 1.0
         smoothing = 0.75
         beatReactivity = 0.6
+        drumReactivityByMode = [:]
     }
 
     func requestSystemAudioPermission() {
@@ -866,6 +901,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
             bassEnergy: bassEnergy,
             bassLevel: bassLevel,
             bands: fftBands,
+            magnitudes: fftMagnitudes,
             advancedSampleCount: advancedSampleCount ?? frameCount,
             sampleRate: sampleRate,
             arrivalTime: BeatClock.now

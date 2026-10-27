@@ -19,6 +19,8 @@ struct WaveVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
+    /// Kicks lift the low layer, snares jolt the mid layer, hats shimmer the high layer.
+    var drumReactivity = DrumReactivity.off
 
     /// Last ~30 published spectrum frames (oldest first), driving the fading echo lines.
     @State private var echoHistory: [WaveEchoFrame] = []
@@ -47,8 +49,12 @@ struct WaveVisualizerView: View {
                 reactivity: beatReactivity
             )
             let bassKick = isActive ? CGFloat(beatReactivity) * beat.bassEnvelope(at: now) : 0
+            let drums = drumReactivity.scaled(by: beatReactivity)
+            let kick = isActive ? CGFloat(drums.kick * beat.kick.pulse(at: now)) : 0
+            let snare = isActive ? CGFloat(drums.snare * beat.snare.pulse(at: now)) : 0
+            let hat = isActive ? CGFloat(drums.hat) * beat.hat.envelope(at: now) : 0
             Canvas { context, size in
-                draw(in: &context, size: size, time: t, bassKick: bassKick)
+                draw(in: &context, size: size, time: t, lifts: [min(1, bassKick + 0.6 * kick), snare, 0], shimmer: hat)
             }
         }
         .background(Color.clear)
@@ -59,15 +65,19 @@ struct WaveVisualizerView: View {
 
     // MARK: - Drawing
 
-    private func draw(in context: inout GraphicsContext, size: CGSize, time t: Double, bassKick: CGFloat) {
+    /// - Parameters:
+    ///   - lifts: Per-layer jump, 0-1: the low layer with the bass and kicks,
+    ///     the mid layer with snares.
+    ///   - shimmer: Hat activity, 0-1, rippling the high layer.
+    private func draw(in context: inout GraphicsContext, size: CGSize, time t: Double, lifts: [CGFloat], shimmer: CGFloat) {
         let w = size.width
         let h = size.height
         let s = size.visualizerScale
         let centerY = h * 0.52
         let g = theme.gradient
         let maxAmplitude = h * 0.42
-        // The low layer jumps up with the bass, up to 6% of the height.
-        let lowLift = bassKick * h * 0.06
+        // Low and mid layers jump up to 6% and 4% of the height.
+        let liftScales: [CGFloat] = [0.06, 0.04, 0]
 
         // background subtle grid
         let gridColor = Color.white.opacity(0.04)
@@ -104,10 +114,11 @@ struct WaveVisualizerView: View {
             let baseY = baseYs[idx]
             let slice = slices[idx]
             let amplitude = amplitude(for: slice, volume: volume, layerIndex: idx, scale: s, maxAmplitude: maxAmplitude)
-            let lift = idx == 0 ? lowLift : 0
+            let lift = lifts[idx] * liftScales[idx] * h
+            let ripple = idx == 2 ? shimmer : 0
             let path = wavePath(
                 slice: slice, baseY: baseY, amplitude: amplitude,
-                width: w, scale: s, points: curvePoints, time: t, layerIndex: idx, lift: lift
+                width: w, scale: s, points: curvePoints, time: t, layerIndex: idx, lift: lift, ripple: ripple
             )
 
             var fillPath = path
@@ -122,8 +133,8 @@ struct WaveVisualizerView: View {
             // stroke with shadow for glow
             context.stroke(path, with: .color(col.opacity(0.28)), lineWidth: 12 * s)
             context.stroke(path, with: .color(col), lineWidth: 2.4 * s)
-            // white core highlight
-            context.stroke(path, with: .color(.white.opacity(0.55)), lineWidth: 1.0 * s)
+            // white core highlight, sizzling with the hats on the high layer
+            context.stroke(path, with: .color(.white.opacity(0.55 + 0.45 * Double(ripple))), lineWidth: (1.0 + 0.8 * ripple) * s)
         }
 
         // center horizontal shine line
@@ -168,8 +179,9 @@ struct WaveVisualizerView: View {
     /// Builds one layer's curve: the region's bands sampled by distance from
     /// center (mirrored), scaled by amplitude, faded at the edges. A small
     /// idle sine is added only when `time` is provided (live wave, not echoes).
-    /// `lift` raises the curve under the same edge fade, so the ends stay put.
-    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, scale s: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0, lift: CGFloat = 0) -> Path {
+    /// `lift` raises the curve under the same edge fade, so the ends stay put;
+    /// `ripple` (0-1) adds a fast, fine shimmer to the live wave.
+    private func wavePath(slice: [CGFloat], baseY: CGFloat, amplitude: CGFloat, width w: CGFloat, scale s: CGFloat, points: Int, time t: Double?, layerIndex idx: Int, yDrift: CGFloat = 0, lift: CGFloat = 0, ripple: CGFloat = 0) -> Path {
         var path = Path()
         guard w > 0, points > 0 else { return path }
         // Smooth the bands first, then smooth along x after sampling, so the
@@ -188,6 +200,9 @@ struct WaveVisualizerView: View {
             var y = baseY + yDrift - (shapes[i] * amplitude + lift) * envelope
             if let t {
                 y += Self.idleOffset(x: x, time: t, layer: idx, scale: s) * envelope
+                if ripple > 0 {
+                    y += sin(x / s * 0.11 + CGFloat(t) * 17) * ripple * 7 * s * envelope
+                }
             }
             if i == 0 {
                 path.move(to: CGPoint(x: x, y: y))

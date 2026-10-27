@@ -9,21 +9,32 @@ struct Y2KBarVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
+    /// Kicks bounce the bars, snares gloss the highlights, hats glint the caps.
+    var drumReactivity = DrumReactivity.off
+
+    /// The gloss lights most of the stage, so it keeps to the strobe cap.
+    @State private var snareGloss = RateLimitedDrumPulse()
 
     var barCount: Int { 32 }
 
     var body: some View {
-        // Ticks only to fade the beat flash; spectrum updates redraw on their own.
+        // Ticks only to fade the beat and drum accents; spectrum updates redraw on their own.
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive || beatReactivity <= 0)) { timeline in
-            let flash = isActive ? beatReactivity * beat.flash(at: BeatClock.time(for: timeline.date)) : 0
+            let now = BeatClock.time(for: timeline.date)
+            let flash = isActive ? beatReactivity * beat.flash(at: now) : 0
+            let drums = drumReactivity.scaled(by: beatReactivity)
+            let gloss = snareGloss.advance(to: now, hits: beat.snare)
+            let kick = isActive ? drums.kick * beat.kick.pulse(at: now) : 0
+            let snare = isActive ? drums.snare * gloss : 0
+            let hat = isActive ? drums.hat * beat.hat.pulse(at: now) : 0
             Canvas { context, size in
-                draw(in: context, size: size, flash: flash)
+                draw(in: context, size: size, flash: flash, kick: kick, snare: snare, hat: hat)
             }
         }
         .background(Color.clear)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize, flash: Double) {
+    private func draw(in context: GraphicsContext, size: CGSize, flash: Double, kick: Double, snare: Double, hat: Double) {
         let w = size.width
         let h = size.height
         let s = size.visualizerScale
@@ -55,10 +66,12 @@ struct Y2KBarVisualizerView: View {
         context.fill(framePath, with: .color(.black.opacity(0.18)))
 
         let grad = Gradient(colors: theme.gradient)
+        let gloss = max(flash, snare)
+        var glints = Path()
         for i in 0..<barCount {
             let specIdx = Int(Double(i)/Double(barCount) * Double(spectrum.count))
             let amp = spectrum[min(specIdx, spectrum.count-1)]
-            let targetH = CGFloat(amp) * maxBarH * CGFloat(sensitivity) * 0.95 + (volume * 14 + 6) * s
+            let targetH = (CGFloat(amp) * maxBarH * CGFloat(sensitivity) * 0.95 + (volume * 14 + 6) * s) * CGFloat(1 + 0.12 * kick)
             let barH = min(maxBarH, max(8 * s, targetH))
             let x = gap + CGFloat(i) * (barW + gap)
             let y = baseY - barH
@@ -70,7 +83,7 @@ struct Y2KBarVisualizerView: View {
             let hiH = barH * 0.38
             let hiRect = CGRect(x: x + s, y: y + s, width: barW - 2 * s, height: hiH)
             let hiPath = Path(roundedRect: hiRect, cornerRadius: barW*0.22)
-            context.fill(hiPath, with: .linearGradient(Gradient(colors: [.white.opacity(0.62 + 0.38 * flash), .white.opacity(0.14 + 0.3 * flash), .clear]), startPoint: CGPoint(x:x, y:y), endPoint: CGPoint(x:x, y:y+hiH)))
+            context.fill(hiPath, with: .linearGradient(Gradient(colors: [.white.opacity(0.62 + 0.38 * gloss), .white.opacity(0.14 + 0.3 * gloss), .clear]), startPoint: CGPoint(x:x, y:y), endPoint: CGPoint(x:x, y:y+hiH)))
             var edge = Path()
             edge.move(to: CGPoint(x: x + s, y: y + 2 * s))
             edge.addLine(to: CGPoint(x: x + s, y: y + barH - 2 * s))
@@ -83,6 +96,10 @@ struct Y2KBarVisualizerView: View {
                 let capPath = Path(roundedRect: peakRect, cornerRadius: 2 * s)
                 context.fill(capPath, with: .linearGradient(capGrad, startPoint: CGPoint(x:x, y: peakY), endPoint: CGPoint(x:x+barW, y: peakY)))
                 context.stroke(capPath, with: .color(.white.opacity(0.5)), lineWidth: 0.6 * s)
+                // Each hat glints a fresh scatter of caps, more toward the treble end.
+                if hat > 0.01 && beat.hat.scatter(i) < 0.12 + 0.4 * Double(i) / Double(barCount) {
+                    glints.addRoundedRect(in: peakRect.insetBy(dx: -3 * s, dy: -3 * s), cornerSize: CGSize(width: 4 * s, height: 4 * s))
+                }
             }
             // reflection
             let reflH = barH * 0.42
@@ -90,6 +107,12 @@ struct Y2KBarVisualizerView: View {
             let reflRect = CGRect(x: x, y: reflTop, width: barW, height: reflH)
             let reflPath = Path(roundedRect: reflRect, cornerRadius: barW*0.22)
             context.fill(reflPath, with: .linearGradient(Gradient(colors: [theme.gradient[1].opacity(0.28), Color.clear]), startPoint: CGPoint(x:x, y:reflTop), endPoint: CGPoint(x:x, y:reflTop+reflH)))
+        }
+
+        if hat > 0.01 {
+            var glow = context
+            glow.blendMode = .plusLighter
+            glow.fill(glints, with: .color(.white.opacity(min(1, 0.8 * hat))))
         }
 
         // ledge

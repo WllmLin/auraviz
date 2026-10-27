@@ -41,7 +41,7 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) { newPresetName = "" }
         } message: {
-            Text("Saves the mode, theme, circle FPS, sensitivity, auto gain, smoothing and beat reactivity. Saving under an existing name replaces that preset.")
+            Text("Saves the mode, theme, circle FPS, sensitivity, auto gain, smoothing, beat reactivity and the mode's drum reactivity. Saving under an existing name replaces that preset.")
         }
         .frame(minWidth: Self.minWindowSize.width, maxWidth: .infinity, minHeight: Self.minWindowSize.height, maxHeight: .infinity)
         .onGeometryChange(for: Bool.self) { $0.size.width < Self.narrowLayoutWidth } action: { isNarrowLayout = $0 }
@@ -581,8 +581,11 @@ struct ContentView: View {
                 if isNarrowLayout {
                     GridRow { sensitivityControl; smoothingControl }
                     GridRow { beatReactivityControl; resetControl }
+                    GridRow { drumControl(.kick); drumControl(.snare) }
+                    GridRow { drumControl(.hat); drumsCaption }
                 } else {
                     GridRow { sensitivityControl; smoothingControl; beatReactivityControl; resetControl }
+                    GridRow { drumControl(.kick); drumControl(.snare); drumControl(.hat); drumsCaption }
                 }
             }
 
@@ -653,6 +656,55 @@ struct ContentView: View {
             Slider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange)
                 .tint(.pink)
                 .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
+        }
+    }
+
+    /// One drum voice's reactivity for the current mode, with a dot that
+    /// flashes on each detected hit.
+    private func drumControl(_ instrument: DrumInstrument) -> some View {
+        let mode = performance.mode
+        let value = Binding(
+            get: { audio.drumReactivity(for: mode)[instrument] },
+            set: { newValue in
+                var reactivity = audio.drumReactivity(for: mode)
+                reactivity[instrument] = newValue
+                audio.setDrumReactivity(reactivity, for: mode)
+            }
+        )
+        let hits = audio.hits(for: instrument)
+        let tint = Self.drumTint(instrument)
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 4) {
+                BeatFlashDot(lastBeatTime: hits.lastHitTime, strength: hits.strength, color: tint, isActive: audio.isRunning)
+                Label(instrument.rawValue, systemImage: instrument.icon).font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
+                Spacer()
+                Text(String(format: "%.0f%%", value.wrappedValue * 100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
+            }
+            Slider(value: value, in: DrumReactivity.range)
+                .tint(tint)
+                .help("How strongly \(mode.rawValue) reacts to the \(instrument.rawValue.lowercased())'s \(instrument.character); scaled by beat reactivity")
+                .accessibilityLabel("\(instrument.rawValue) reactivity for \(mode.rawValue)")
+        }
+    }
+
+    private static func drumTint(_ instrument: DrumInstrument) -> Color {
+        switch instrument {
+        case .kick: return .red
+        case .snare: return .yellow
+        case .hat: return .mint
+        }
+    }
+
+    private var drumsCaption: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("DRUMS · \(performance.mode.rawValue.uppercased())")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(.white.opacity(0.7))
+            Text("Set per visualizer. Dots flash on detected hits.")
+                .font(.system(size: 10, weight: .medium, design: .rounded))
+                .foregroundStyle(.white.opacity(0.45))
+                .lineLimit(2)
         }
     }
 

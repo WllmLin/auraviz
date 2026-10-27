@@ -7,7 +7,8 @@ import SwiftUI
 /// brighten with the kick and the low band, and everything is drawn
 /// additively in the theme's gradient. Kick flashes are rate-limited to the
 /// strobe cap, so fast kicks can't make the beams flash more than 3 times a
-/// second.
+/// second. Kick hits punch the hot spots at the apertures, snares throw the
+/// fans open and hats make a scatter of beam cores shimmer.
 struct LaserVisualizerView: View {
     var spectrum: [CGFloat]
     var volume: CGFloat
@@ -17,6 +18,8 @@ struct LaserVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
+    /// Kicks punch the apertures, snares open the fans, hats shimmer the beams.
+    var drumReactivity = DrumReactivity.off
 
     @State private var sweep = BeatSyncedPhase()
     @State private var light = LaserLight()
@@ -65,21 +68,28 @@ struct LaserVisualizerView: View {
             // Never fully dark between kicks, so the kick modulates the beams
             // rather than switching them on and off.
             let level = min(1.2, 0.3 + (0.5 - 0.2 * beatReactivity) * energy + 0.3 * low + 0.6 * kick)
+            let drums = drumReactivity.scaled(by: beatReactivity)
+            let accents = LaserDrumAccents(
+                kick: isActive ? drums.kick * beat.kick.pulse(at: now) : 0,
+                snare: isActive ? drums.snare * beat.snare.pulse(at: now) : 0,
+                hat: isActive ? drums.hat * beat.hat.pulse(at: now) : 0,
+                hatHits: beat.hat
+            )
             Canvas { context, size in
-                draw(in: context, size: size, phase: phase, energy: energy, level: level, kick: kick, palette: palette)
+                draw(in: context, size: size, phase: phase, energy: energy, level: level, kick: kick, drums: accents, palette: palette)
             }
         }
         .background(Color.clear)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize, phase: Double, energy: Double, level: Double, kick: Double, palette: LaserPalette) {
+    private func draw(in context: GraphicsContext, size: CGSize, phase: Double, energy: Double, level: Double, kick: Double, drums: LaserDrumAccents, palette: LaserPalette) {
         let w = size.width
         let h = size.height
         let s = size.visualizerScale
         let reach = hypot(w, h) * 1.1
         // cos puts the extremes of the swing on the beats.
         let swing = cos(2 * .pi * phase)
-        let spreadScale = 1 + 0.25 * energy + 0.15 * kick
+        let spreadScale = 1 + 0.25 * energy + 0.15 * kick + 0.3 * drums.snare
         var glow = context
         glow.blendMode = .plusLighter
 
@@ -113,11 +123,13 @@ struct LaserVisualizerView: View {
                 }
                 glow.stroke(beam, with: shading(color, alpha * 0.10), lineWidth: 16 * s)
                 glow.stroke(beam, with: shading(color, alpha * 0.35), lineWidth: 5 * s)
-                glow.stroke(beam, with: shading(core, alpha * 0.9), lineWidth: (1.2 + 0.8 * kick) * s)
+                // Thin cores only, so the shimmer never brightens the stage much.
+                let shimmer = drums.hat > 0.01 && drums.hatHits.scatter(e * 16 + k) < 0.35 ? drums.hat : 0
+                glow.stroke(beam, with: shading(core, alpha * 0.9 + shimmer), lineWidth: (1.2 + 0.8 * kick + 1.2 * shimmer) * s)
             }
 
             // Hot spot at the aperture.
-            let r = (22 + 18 * level) * s
+            let r = (22 + 18 * level + 26 * drums.kick) * s
             glow.fill(
                 Path(ellipseIn: CGRect(x: origin.x - r, y: origin.y - r, width: r * 2, height: r * 2)),
                 with: .radialGradient(
@@ -127,6 +139,15 @@ struct LaserVisualizerView: View {
             )
         }
     }
+}
+
+/// One frame's drum accents, already scaled by the reactivity, each 0-1.
+private struct LaserDrumAccents {
+    var kick: Double
+    var snare: Double
+    var hat: Double
+    /// Picks which beams shimmer on the current hat.
+    var hatHits: DrumHits
 }
 
 /// Beam brightness inputs. Kicks only fire a flash at least

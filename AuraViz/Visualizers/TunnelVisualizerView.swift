@@ -2,8 +2,9 @@ import SwiftUI
 
 /// Pseudo-3D tunnel: hexagonal rings fly toward the viewer at one ring per
 /// beat (or a volume-driven cruise until a tempo is known), their outlines
-/// wobbling with the spectrum. Every kick launches a bright ring down the
-/// tunnel.
+/// wobbling with the spectrum. Every beat launches a bright ring down the
+/// tunnel; kicks make it breathe, snares light the corner rails and hats spark
+/// a scatter of ring corners.
 struct TunnelVisualizerView: View {
     var spectrum: [CGFloat]
     var volume: CGFloat
@@ -13,6 +14,8 @@ struct TunnelVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
+    /// Kicks breathe the rings, snares light the rails, hats spark corners.
+    var drumReactivity = DrumReactivity.off
 
     @State private var flight = TunnelFlight()
 
@@ -43,14 +46,21 @@ struct TunnelVisualizerView: View {
                 nearDepth: Self.nearDepth
             )
             let flash = isActive ? beatReactivity * beat.flash(at: now) : 0
+            let drums = drumReactivity.scaled(by: beatReactivity)
+            let accents = TunnelDrumAccents(
+                kick: isActive ? drums.kick * beat.kick.pulse(at: now) : 0,
+                snare: isActive ? drums.snare * beat.snare.pulse(at: now) : 0,
+                hat: isActive ? drums.hat * beat.hat.pulse(at: now) : 0,
+                hatHits: beat.hat
+            )
             Canvas { context, size in
-                draw(in: context, size: size, time: t, depth: depth, flash: flash, profile: profile, palette: palette)
+                draw(in: context, size: size, time: t, depth: depth, flash: flash, drums: accents, profile: profile, palette: palette)
             }
         }
         .background(Color.clear)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize, time t: Double, depth: Double, flash: Double, profile: [Double], palette: TunnelPalette) {
+    private func draw(in context: GraphicsContext, size: CGSize, time t: Double, depth: Double, flash: Double, drums: TunnelDrumAccents, profile: [Double], palette: TunnelPalette) {
         let w = size.width
         let h = size.height
         let s = size.visualizerScale
@@ -62,7 +72,7 @@ struct TunnelVisualizerView: View {
         let energy = Double(min(1, max(0, volume)))
         let spin = t * 0.1
         let twistStep = 2 * Double.pi / Self.ringsPerTwist
-        let breath = 1 + 0.05 * flash
+        let breath = 1 + 0.05 * flash + 0.06 * drums.kick
         // The far end wanders slowly, so the tunnel seems to curve.
         let drift = CGSize(width: sin(t * 0.31) * w * 0.06, height: cos(t * 0.23) * h * 0.05)
         var glow = context
@@ -110,6 +120,7 @@ struct TunnelVisualizerView: View {
         let first = Int((depth + Self.nearDepth).rounded(.up))
         let last = Int((depth + n).rounded(.down))
         var previousCorners: [CGPoint]?
+        var sparks = Path()
         if first <= last {
             for i in stride(from: last, through: first, by: -1) {
                 let z = Double(i) - depth
@@ -133,9 +144,20 @@ struct TunnelVisualizerView: View {
                         rails.move(to: from)
                         rails.addLine(to: to)
                     }
-                    context.stroke(rails, with: .color(.white.opacity(0.14 * alpha)), lineWidth: 0.8 * s)
+                    context.stroke(rails, with: .color(.white.opacity((0.14 + 0.6 * drums.snare) * alpha)), lineWidth: (0.8 + 1.2 * drums.snare) * s)
+                }
+
+                // Each hat sparks a fresh scatter of about one corner in five.
+                if drums.hat > 0.01 {
+                    let sparkR = min(5 * s, s * (0.8 + 2.4 / z)) * (1 + drums.hat)
+                    for (k, corner) in ringCorners.enumerated() where drums.hatHits.scatter(i * Self.sides + k) < 0.2 * alpha {
+                        sparks.addEllipse(in: CGRect(x: corner.x - sparkR, y: corner.y - sparkR, width: sparkR * 2, height: sparkR * 2))
+                    }
                 }
             }
+        }
+        if drums.hat > 0.01 {
+            glow.fill(sparks, with: .color(.white.opacity(min(1, drums.hat))))
         }
 
         // beat rings — white-hot cores in a bloom of the theme's brightest color
@@ -179,6 +201,15 @@ struct TunnelVisualizerView: View {
         let value = Double(spectrum[lower]) * (1 - fraction) + Double(spectrum[upper]) * fraction
         return min(1, pow(max(0, value), 0.8) * sensitivity)
     }
+}
+
+/// One frame's drum accents, already scaled by the reactivity, each 0-1.
+private struct TunnelDrumAccents {
+    var kick: Double
+    var snare: Double
+    var hat: Double
+    /// Picks which corners spark on the current hat.
+    var hatHits: DrumHits
 }
 
 /// Camera position along the tunnel plus the beat rings in flight. A class

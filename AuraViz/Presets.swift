@@ -12,6 +12,7 @@ enum SettingsKey {
     static let autoGainEnabled = "autoGainEnabled"
     static let smoothing = "smoothing"
     static let beatReactivity = "beatReactivity"
+    static let drumReactivity = "drumReactivity"
     static let lyricsText = "lyricsText"
     static let lyricsEnabled = "lyricsEnabled"
 }
@@ -42,6 +43,9 @@ struct Preset: Codable, Identifiable, Equatable {
     var autoGainEnabled = true
     var smoothing = 0.75
     var beatReactivity = 0.6
+    /// The drum reactivity of `mode`; nil (built-ins, older presets) leaves
+    /// the mode's current setting alone.
+    var drumReactivity: DrumReactivity?
 }
 
 extension Preset {
@@ -54,7 +58,8 @@ extension Preset {
             sensitivity: audio.sensitivity,
             autoGainEnabled: audio.autoGainEnabled,
             smoothing: audio.smoothing,
-            beatReactivity: audio.beatReactivity
+            beatReactivity: audio.beatReactivity,
+            drumReactivity: audio.drumReactivity(for: performance.mode)
         )
     }
 
@@ -72,6 +77,7 @@ extension Preset {
         autoGainEnabled = (try? container.decode(Bool.self, forKey: .autoGainEnabled)) ?? fallback.autoGainEnabled
         smoothing = (try? container.decode(Double.self, forKey: .smoothing)) ?? fallback.smoothing
         beatReactivity = (try? container.decode(Double.self, forKey: .beatReactivity)) ?? fallback.beatReactivity
+        drumReactivity = try? container.decode(DrumReactivity.self, forKey: .drumReactivity)
     }
 
     /// Crossfades the stage to this preset's look and sets its controls.
@@ -87,6 +93,9 @@ extension Preset {
         audio.autoGainEnabled = autoGainEnabled
         audio.smoothing = smoothing.clamped(to: AudioEngineManager.smoothingRange)
         audio.beatReactivity = beatReactivity.clamped(to: AudioEngineManager.beatReactivityRange)
+        if let drumReactivity {
+            audio.setDrumReactivity(drumReactivity, for: mode)
+        }
     }
 }
 

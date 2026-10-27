@@ -100,7 +100,7 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("Space", "Blackout (audio keeps running)"),
     ("S hold", "Strobe, at most 3 flashes/s"),
     ("B", "Tap tempo"),
-    ("R", "Reset sensitivity, smoothing & reactivity"),
+    ("R", "Reset sensitivity, smoothing & beat/drum reactivity"),
     ("F", "Output full screen"),
     ("Esc", "Leave output full screen"),
     ("H", "Show / hide controls"),

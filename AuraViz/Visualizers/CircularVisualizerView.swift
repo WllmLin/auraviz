@@ -10,6 +10,8 @@ struct CircularVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
+    /// Kicks fire the shockwave, snares flare the rim, hats twinkle the LED ring.
+    var drumReactivity = DrumReactivity.off
 
     @State private var barRotation = BeatSyncedPhase()
 
@@ -32,6 +34,7 @@ struct CircularVisualizerView: View {
             )
             let punch = beatPunch(age: beatAge)
             let glowBoost = beatGlow(at: now, age: beatAge)
+            let drums = drumAccents(at: now)
             Canvas { context, size in
                 let w = size.width
                 let h = size.height
@@ -53,7 +56,7 @@ struct CircularVisualizerView: View {
                 let glowRect = CGRect(x: center.x - glowRadius, y: center.y - glowRadius, width: glowRadius*2, height: glowRadius*2)
                 context.fill(Path(ellipseIn: glowRect), with: .radialGradient(glowGradient, center: center, startRadius: radius, endRadius: glowRadius))
 
-                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, scale: s, time: t, beatPhase: beatPhase, beatAge: beatAge, flash: flash, glowBoost: glowBoost, palette: palette)
+                drawNeonCore(in: context, center: center, radius: radius, baseRadius: baseRadius, scale: s, time: t, beatPhase: beatPhase, flash: flash, glowBoost: glowBoost, drums: drums, palette: palette)
 
                 // radial bars
                 let count = 72
@@ -135,10 +138,24 @@ struct CircularVisualizerView: View {
         return beatReactivity * Double(beat.bassEnvelope(at: time)) * exp(-age / 0.2)
     }
 
+    private func drumAccents(at time: TimeInterval) -> CircleDrumAccents {
+        guard isActive else { return CircleDrumAccents() }
+        let amount = drumReactivity.scaled(by: beatReactivity)
+        return CircleDrumAccents(
+            kickAge: beat.kick.hitAge(at: time),
+            kickStrength: Double(beat.kick.strength),
+            kick: amount.kick,
+            snare: amount.snare * beat.snare.pulse(at: time),
+            hat: amount.hat * beat.hat.pulse(at: time),
+            hatHits: beat.hat
+        )
+    }
+
     /// LED-tunnel core: tempo-synced rings flowing out of a bright eye, a
-    /// spectrum-driven dot meter, a segmented LED ring and a white-hot neon rim
-    /// that flares on every kick.
-    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, scale s: Double, time t: Double, beatPhase: Double, beatAge: Double, flash: Double, glowBoost: Double, palette: NeonPalette) {
+    /// spectrum-driven dot meter, a segmented LED ring that twinkles on hats
+    /// and a white-hot neon rim that flares on every snare, with a shockwave
+    /// out to it on every kick.
+    private func drawNeonCore(in context: GraphicsContext, center: CGPoint, radius: Double, baseRadius: Double, scale s: Double, time t: Double, beatPhase: Double, flash: Double, glowBoost: Double, drums: CircleDrumAccents, palette: NeonPalette) {
         func circle(_ r: Double) -> Path {
             Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r*2, height: r*2))
         }
@@ -169,10 +186,11 @@ struct CircularVisualizerView: View {
 
         // kick shockwave from the eye to the rim
         let shockDuration = 0.4
-        if isActive && beatAge < shockDuration {
-            let p = beatAge / shockDuration
+        if drums.kick > 0 && drums.kickAge < shockDuration {
+            let p = drums.kickAge / shockDuration
             let r = radius * (0.10 + 0.86 * (1 - pow(1 - p, 3)))
-            glow.stroke(circle(r), with: .color(palette.rim.opacity((1 - p) * (0.25 + 0.5 * Double(beat.beatStrength)))), lineWidth: (1 + 3 * (1 - p)) * s)
+            let alpha = (1 - p) * (0.3 + 0.6 * drums.kickStrength) * min(1, 1.4 * drums.kick)
+            glow.stroke(circle(r), with: .color(palette.rim.opacity(alpha)), lineWidth: (1 + 3 * (1 - p)) * s)
         }
 
         // dot meter — three rows per column light up from the inside out with
@@ -207,6 +225,8 @@ struct CircularVisualizerView: View {
         let ledSize = max(1.8, radius * 0.032)
         var ledLevels = Array(repeating: Path(), count: 4)
         var hotCores = Path()
+        var twinkles = Path()
+        let twinkleSize = ledSize * 1.6
         for i in 0..<ledCount where i % 6 != 5 {
             let amp = min(1, Double(circularAmplitude(at: i, barCount: ledCount)) * sensitivity)
             let level = min(3, Int(amp * 4))
@@ -217,18 +237,25 @@ struct CircularVisualizerView: View {
             if level == 3 {
                 hotCores.addEllipse(in: CGRect(x: x - ledSize/4, y: y - ledSize/4, width: ledSize/2, height: ledSize/2))
             }
+            // Each hat lights a fresh scatter of about one LED in six.
+            if drums.hat > 0.01 && drums.hatHits.scatter(i) < 0.16 {
+                twinkles.addEllipse(in: CGRect(x: x - twinkleSize/2, y: y - twinkleSize/2, width: twinkleSize, height: twinkleSize))
+            }
         }
         context.fill(ledLevels[0], with: .color(palette.led.opacity(0.18)))
         for level in 1...3 {
             glow.fill(ledLevels[level], with: .color(palette.led.opacity(0.25 + 0.25 * Double(level))))
         }
         glow.fill(hotCores, with: .color(.white.opacity(0.9)))
+        if drums.hat > 0.01 {
+            glow.fill(twinkles, with: .color(.white.opacity(min(1, drums.hat))))
+        }
 
         context.stroke(circle(radius * 0.92), with: .color(palette.led.opacity(0.3)), lineWidth: 0.8 * s)
 
         // neon rim — stacked strokes fake a bloom around a white-hot line
         let rimPath = circle(radius * 0.97)
-        let intensity = 0.55 + 0.3 * energy + 0.45 * flash + 0.6 * glowBoost
+        let intensity = 0.55 + 0.3 * energy + 0.45 * flash + 0.6 * glowBoost + 0.7 * drums.snare
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.10 * intensity)), lineWidth: radius * 0.22)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.22 * intensity)), lineWidth: radius * 0.10)
         glow.stroke(rimPath, with: .color(palette.rim.opacity(0.55 * intensity)), lineWidth: radius * 0.04)
@@ -271,6 +298,20 @@ struct CircularVisualizerView: View {
         let sharedPulse = min(1, max(0, volume))
         return min(1, compressedEnergy * 0.82 + sharedPulse * 0.30)
     }
+}
+
+/// One frame's drum accents, already scaled by the reactivity.
+private struct CircleDrumAccents {
+    var kickAge: TimeInterval = .infinity
+    var kickStrength = 0.0
+    /// Shockwave reactivity.
+    var kick = 0.0
+    /// Rim flare, 0-1.
+    var snare = 0.0
+    /// LED twinkle, 0-1.
+    var hat = 0.0
+    /// Picks which LEDs twinkle on the current hat.
+    var hatHits = DrumHits(instrument: .hat)
 }
 
 /// Neon roles picked from a theme: dark gradient stops (black, deep navy) are
