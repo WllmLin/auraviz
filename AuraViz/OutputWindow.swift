@@ -1,5 +1,7 @@
 import AppKit
+import ScreenCaptureKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Contents of the "AuraViz Output" window: only the visualizer, edge to edge
 /// on black, with no controls or HUD.
@@ -35,8 +37,11 @@ final class OutputWindowController: ObservableObject {
     @Published private(set) var displays: [OutputDisplay] = []
     @Published var selectedDisplayID: CGDirectDisplayID?
     @Published private(set) var isOpen = false
+    /// The latest screenshot attempt, for the control window's shutter feedback.
+    @Published private(set) var snapshot: OutputSnapshot?
 
     private weak var window: NSWindow?
+    private var isCapturing = false
     private var presentWhenAttached = false
     /// Set while leaving full screen on one display to re-enter it on another.
     private var pendingScreen: NSScreen?
@@ -223,6 +228,97 @@ final class OutputWindowController: ObservableObject {
         NSCursor.setHiddenUntilMouseMoves(true)
         cursorHidden = true
     }
+
+    // MARK: - Screenshot
+
+    /// Grabs the output window's current frame as shown, strobe, blackout and
+    /// transitions included, and saves it to the Desktop as a timestamped PNG.
+    /// Only publishes `snapshot`; nothing is drawn on the output.
+    func captureFrame() {
+        guard !isCapturing else { return }
+        guard let window, window.isVisible else {
+            reportSnapshot(url: nil, message: "Open the output to take a screenshot")
+            return
+        }
+        isCapturing = true
+        let windowID = CGWindowID(window.windowNumber)
+        let date = Date()
+        Task { @MainActor [weak self] in
+            do {
+                let image = try await Self.captureImage(ofWindow: windowID)
+                // PNG-encoding a 4K frame takes long enough to drop output frames.
+                let url = try await Task.detached(priority: .utility) {
+                    try Self.writePNG(image, takenAt: date)
+                }.value
+                self?.reportSnapshot(url: url, message: "Saved \(url.lastPathComponent) to the Desktop")
+            } catch {
+                let message: String
+                if !CGPreflightScreenCaptureAccess() {
+                    _ = CGRequestScreenCaptureAccess()
+                    message = "Allow AuraViz in System Settings → Privacy & Security → Screen & System Audio Recording, then try again."
+                } else {
+                    message = "Screenshot failed: \(error.localizedDescription)"
+                }
+                self?.reportSnapshot(url: nil, message: message)
+            }
+            self?.isCapturing = false
+        }
+    }
+
+    private func reportSnapshot(url: URL?, message: String) {
+        snapshot = OutputSnapshot(id: (snapshot?.id ?? 0) + 1, url: url, message: message)
+    }
+
+    private static func captureImage(ofWindow windowID: CGWindowID) async throws -> CGImage {
+        let content: SCShareableContent
+        if #available(macOS 14.4, *) {
+            content = try await SCShareableContent.currentProcess
+        } else {
+            content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        }
+        guard let scWindow = content.windows.first(where: { $0.windowID == windowID }) else {
+            throw CocoaError(.fileNoSuchFile, userInfo: [NSLocalizedDescriptionKey: "The output window isn't on screen."])
+        }
+        let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let configuration = SCStreamConfiguration()
+        let scale = CGFloat(filter.pointPixelScale)
+        configuration.width = Int((filter.contentRect.width * scale).rounded())
+        configuration.height = Int((filter.contentRect.height * scale).rounded())
+        configuration.captureResolution = .best
+        configuration.showsCursor = false
+        configuration.ignoreShadowsSingleWindow = true
+        return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    }
+
+    /// Writes "AuraViz <date> at <time>.png" to the Desktop, numbering it if
+    /// two shots land in the same second.
+    private static func writePNG(_ image: CGImage, takenAt date: Date) throws -> URL {
+        let desktop = try FileManager.default.url(for: .desktopDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        let stem = "AuraViz \(formatter.string(from: date))"
+        var url = desktop.appendingPathComponent("\(stem).png")
+        var copy = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = desktop.appendingPathComponent("\(stem) (\(copy)).png")
+            copy += 1
+        }
+        guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { throw CocoaError(.fileWriteUnknown) }
+        return url
+    }
+}
+
+/// One screenshot attempt: the saved PNG, or nil if it failed, and what to
+/// tell the performer.
+struct OutputSnapshot: Equatable {
+    let id: Int
+    let url: URL?
+    let message: String
 }
 
 extension NSScreen {

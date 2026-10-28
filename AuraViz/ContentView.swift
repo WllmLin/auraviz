@@ -26,6 +26,8 @@ struct ContentView: View {
                 windowedLayout
             }
         }
+        // Here, not on the output, so the shutter never shows to the audience.
+        .overlay { SnapshotFeedback(snapshot: output.snapshot) }
         .overlay {
             if performance.isShowingShortcuts {
                 ShortcutCheatSheet(isPresented: $performance.isShowingShortcuts)
@@ -886,6 +888,62 @@ private struct BeatFlashDot: View {
                 .shadow(color: color.opacity(flash), radius: 6 * flash)
         }
         .frame(width: 12, height: 12)
+    }
+}
+
+/// Shutter feedback for an output screenshot: a soft flash over the control
+/// window and a toast naming the file (or why it failed) for 3 s.
+private struct SnapshotFeedback: View {
+    var snapshot: OutputSnapshot?
+    @State private var toast: OutputSnapshot?
+    /// Advances only on a saved shot, so a failure doesn't flash.
+    @State private var shutterCount = 0
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.white
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .keyframeAnimator(initialValue: 0.0, trigger: shutterCount) { content, opacity in
+                    content.opacity(opacity)
+                } keyframes: { _ in
+                    MoveKeyframe(0.45)
+                    LinearKeyframe(0.0, duration: 0.25)
+                }
+            if let toast {
+                HStack(spacing: 10) {
+                    Image(systemName: toast.url == nil ? "exclamationmark.triangle.fill" : "camera.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(toast.url == nil ? .orange : .white)
+                    Text(toast.message)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .lineLimit(2)
+                    if let url = toast.url {
+                        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .background(.white.opacity(0.14), in: Capsule())
+                    }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 9)
+                .background(.black.opacity(0.7), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.18), lineWidth: 1))
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .id(toast.id)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: toast)
+        .task(id: snapshot?.id) {
+            guard let snapshot else { return }
+            if snapshot.url != nil { shutterCount += 1 }
+            toast = snapshot
+            try? await Task.sleep(for: .seconds(3))
+            if !Task.isCancelled { toast = nil }
+        }
     }
 }
 

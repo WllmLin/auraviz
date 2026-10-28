@@ -69,6 +69,8 @@ private struct PerformanceMenu: View {
         Divider()
         Button("Toggle Output Full Screen") { ignoringKeyRepeat(toggleOutputFullScreen) }
             .keyboardShortcut("f", modifiers: [])
+        Button("Screenshot Output to Desktop") { ignoringKeyRepeat(output.captureFrame) }
+            .keyboardShortcut("p", modifiers: [])
         Divider()
         Button("Keyboard Shortcuts") { ignoringKeyRepeat { performance.isShowingShortcuts.toggle() } }
             .keyboardShortcut("/", modifiers: .command)
@@ -103,6 +105,7 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("R", "Reset sensitivity, smoothing & beat/drum reactivity"),
     ("F", "Output full screen"),
     ("Esc", "Leave output full screen"),
+    ("P", "Screenshot the output to the Desktop"),
     ("H", "Show / hide controls"),
     ("⌘/", "This cheat sheet"),
 ]

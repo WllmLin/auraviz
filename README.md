@@ -41,6 +41,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme · **L** lyrics overlay on / off
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
+  - **P** screenshot: saves the output's current frame (as shown, strobe and blackout included) to the Desktop as `AuraViz <date> at <time>.png`; a shutter flash and toast show in the control window only, never on the output. Needs Screen & System Audio Recording access.
   - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing, beat reactivity and every mode's drum reactivity · **H** show/hide controls
 
 - **Aesthetic**
@@ -57,7 +58,7 @@ AuraViz/
 │   ├── PerformanceState.swift         # Shared mode / theme / FPS, blackout, rate-limited strobe, crossfade
 │   ├── PerformanceCommands.swift      # Performance menu shortcuts + cheat-sheet overlay
 │   ├── Presets.swift                  # Preset model, built-ins, JSON store, Presets menu; settings keys
-│   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding
+│   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding, screenshots
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
 │   ├── BeatTracker.swift              # Kick onsets, spectral flux, BPM, beat phase, tap tempo; kick/snare/hat detection
