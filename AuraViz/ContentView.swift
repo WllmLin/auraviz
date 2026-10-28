@@ -437,20 +437,39 @@ struct ContentView: View {
                     color: performance.theme.gradient.first!,
                     isActive: audio.isRunning
                 )
-                Text(audio.bpm > 0 ? String(format: "%.0f BPM", audio.bpm) : "--- BPM")
+                Text(tempoText)
                     .font(.system(size: 10, weight: .black, design: .monospaced))
                     .tracking(0.5)
                     .foregroundStyle(.white.opacity(0.85))
+                if isTempoNudged {
+                    Text(String(format: "%+.1f", audio.tempoNudge))
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(performance.theme.gradient.first!)
+                }
             }
             .padding(.horizontal, 10).padding(.vertical, 6)
             .background(.black.opacity(0.45), in: Capsule())
             .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .help("Click or press B on each beat to tap the tempo")
+        .help("Click or press B on each beat to tap the tempo; [ / ] nudge it by 0.5 BPM, ⇧ for 0.1")
         .accessibilityLabel("Tempo")
-        .accessibilityValue(audio.bpm > 0 ? String(format: "%.0f beats per minute", audio.bpm) : "Detecting")
+        .accessibilityValue(tempoAccessibilityValue)
         .accessibilityHint("Tap on each beat to set the tempo")
+    }
+
+    /// Nudges are as small as 0.1 BPM, so a nudged tempo shows a decimal.
+    private var isTempoNudged: Bool { audio.bpm > 0 && abs(audio.tempoNudge) >= 0.05 }
+
+    private var tempoText: String {
+        guard audio.bpm > 0 else { return "--- BPM" }
+        return String(format: isTempoNudged ? "%.1f BPM" : "%.0f BPM", audio.bpm)
+    }
+
+    private var tempoAccessibilityValue: String {
+        guard audio.bpm > 0 else { return "Detecting" }
+        guard isTempoNudged else { return String(format: "%.0f beats per minute", audio.bpm) }
+        return String(format: "%.1f beats per minute, nudged %+.1f", audio.bpm, audio.tempoNudge)
     }
 
     private var autoGainBadge: some View {

@@ -64,6 +64,17 @@ private struct PerformanceMenu: View {
         Divider()
         Button("Tap Tempo") { ignoringKeyRepeat { audio.tapTempo() } }
             .keyboardShortcut("b", modifiers: [])
+        // Nudges repeat while held. The fine steps are bound to the shifted
+        // characters: a non-letter key equivalent with ⇧ wouldn't match the
+        // typed "{" / "}" (like ⌘? for Help).
+        Button("Nudge Tempo Down 0.5 BPM") { audio.nudgeTempo(by: -0.5) }
+            .keyboardShortcut("[", modifiers: [])
+        Button("Nudge Tempo Up 0.5 BPM") { audio.nudgeTempo(by: 0.5) }
+            .keyboardShortcut("]", modifiers: [])
+        Button("Nudge Tempo Down 0.1 BPM") { audio.nudgeTempo(by: -0.1) }
+            .keyboardShortcut("{", modifiers: [])
+        Button("Nudge Tempo Up 0.1 BPM") { audio.nudgeTempo(by: 0.1) }
+            .keyboardShortcut("}", modifiers: [])
         Button("Reset Controls") { audio.resetVisualizationControls() }
             .keyboardShortcut("r", modifiers: [])
         Divider()
@@ -102,6 +113,8 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("Space", "Blackout (audio keeps running)"),
     ("S hold", "Strobe, at most 3 flashes/s"),
     ("B", "Tap tempo"),
+    ("[ / ]", "Nudge tempo −/+ 0.5 BPM"),
+    ("⇧[ / ⇧]", "Nudge tempo −/+ 0.1 BPM"),
     ("R", "Reset sensitivity, smoothing & beat/drum reactivity"),
     ("F", "Output full screen"),
     ("Esc", "Leave output full screen"),

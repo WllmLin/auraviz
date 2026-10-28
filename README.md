@@ -42,7 +42,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
   - **P** screenshot: saves the output's current frame (as shown, strobe and blackout included) to the Desktop as `AuraViz <date> at <time>.png`; a shutter flash and toast show in the control window only, never on the output. Needs Screen & System Audio Recording access.
-  - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **R** reset sensitivity, smoothing, beat reactivity and every mode's drum reactivity · **H** show/hide controls
+  - **F** toggle the output window's full screen (opens it if closed) · **B** tap tempo · **[ / ]** nudge the tempo by ∓/± 0.5 BPM (**⇧[ / ⇧]** 0.1 BPM) without re-tapping; the beat grid keeps its phase, the HUD shows the adjusted tempo to a tenth with the offset (e.g. `128.5 BPM +0.5`), and detection keeps the offset until the track's tempo changes or you tap again · **R** reset sensitivity, smoothing, beat reactivity and every mode's drum reactivity · **H** show/hide controls
 
 - **Aesthetic**
   - Dark mesh background with blurred aurora orbs, glassmorphism cards, rounded 22pt containers, ultraThinMaterial, neon gradients, glow + shadow.

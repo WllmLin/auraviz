@@ -179,8 +179,10 @@ struct BeatAnalysis {
     var beatCount = 0
     var lastBeatTime: TimeInterval = -.infinity
     var beatStrength: CGFloat = 0
-    /// 0 until a tempo has been detected or tapped.
+    /// 0 until a tempo has been detected or tapped. Includes `tempoNudge`.
     var bpm: Double = 0
+    /// BPM added to the detected tempo with the nudge keys; 0 when not nudged.
+    var tempoNudge: Double = 0
     var onsetFlux: CGFloat = 0
     /// Unsmoothed low-band level: instant attack, exponential release.
     var bassEnvelope: CGFloat = 0
@@ -358,6 +360,10 @@ final class BeatTracker {
     private var tempoHistogram = [Float](repeating: 0, count: 120)
     private var voteKernel = [Float](repeating: 0, count: 9)
     private var bpm: Double = 0
+    /// Offset the user nudged the tempo by. Detection keeps smoothing towards
+    /// the estimate plus this, so a fine adjustment isn't drifted back out; a
+    /// new tempo or a tap clears it.
+    private var tempoNudge: Double = 0
     private var pendingBPM: Double = 0
     private var pendingBPMVotes = 0
     private var manualHoldUntil: TimeInterval = 0
@@ -552,6 +558,7 @@ final class BeatTracker {
             let interval = (time - oldestTap) / Double(usedTaps - 1)
             if interval > 0 {
                 bpm = foldIntoTempoRange(60 / interval)
+                tempoNudge = 0
                 pendingBPMVotes = 0
                 needsPhaseSnap = false
                 manualHoldUntil = time + manualHoldDuration
@@ -559,6 +566,20 @@ final class BeatTracker {
         }
         updatePhaseRate()
 
+        return snapshot(isBeat: false, onsetFlux: 0, analysisTime: lastAnalysisTime)
+    }
+
+    /// Fine-adjusts the current tempo by `delta` BPM at `time` (`BeatClock.now`)
+    /// without moving the beat phase. Does nothing until a tempo is known.
+    func nudgeTempo(by delta: Double, at time: TimeInterval) -> BeatAnalysis {
+        if bpm > 0 {
+            advancePhase(to: time)
+            let nudged = min(maximumBPM, max(minimumBPM, bpm + delta))
+            // Hundredths, so repeated 0.1 steps add back up to exactly 0.
+            tempoNudge = ((tempoNudge + nudged - bpm) * 100).rounded() / 100
+            bpm = nudged
+            updatePhaseRate()
+        }
         return snapshot(isBeat: false, onsetFlux: 0, analysisTime: lastAnalysisTime)
     }
 
@@ -751,7 +772,8 @@ final class BeatTracker {
     /// octave flip) must be estimated repeatedly before it replaces the current one.
     private func applyTempoEstimate(_ estimate: Double, now: TimeInterval) {
         if bpm > 0, abs(estimate / bpm - 1) < 0.04 {
-            bpm += (estimate - bpm) * 0.2
+            let target = min(maximumBPM, max(minimumBPM, estimate + tempoNudge))
+            bpm += (target - bpm) * 0.2
             pendingBPMVotes = 0
             return
         }
@@ -766,6 +788,7 @@ final class BeatTracker {
         }
         if pendingBPMVotes >= (bpm > 0 ? 6 : 3) {
             bpm = pendingBPM
+            tempoNudge = 0
             pendingBPMVotes = 0
             needsPhaseSnap = true
         }
@@ -869,6 +892,7 @@ final class BeatTracker {
             lastBeatTime: lastBeatTime,
             beatStrength: CGFloat(lastBeatStrength),
             bpm: bpm,
+            tempoNudge: tempoNudge,
             onsetFlux: CGFloat(onsetFlux),
             bassEnvelope: CGFloat(bassEnvelope),
             analysisTime: analysisTime,

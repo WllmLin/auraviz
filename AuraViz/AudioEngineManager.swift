@@ -189,6 +189,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
     var lastBeatTime: TimeInterval { visualization.beat.lastBeatTime }
     var beatStrength: CGFloat { visualization.beat.beatStrength }
     var bpm: Double { visualization.beat.bpm }
+    var tempoNudge: Double { visualization.beat.tempoNudge }
     var onsetFlux: CGFloat { visualization.beat.onsetFlux }
     var bassEnvelope: CGFloat { visualization.beat.bassEnvelope }
     var beatClock: BeatClock { visualization.beat.clock }
@@ -378,11 +379,25 @@ final class AudioEngineManager: NSObject, ObservableObject {
     /// taps set the tempo and re-sync the beat grid.
     func tapTempo() {
         let tapTime = BeatClock.now
+        updateTempo { $0.tap(at: tapTime) }
+    }
+
+    /// Fine-adjusts the tempo by `delta` BPM without re-tapping or moving the
+    /// beat phase. Detection keeps the offset until the track's tempo changes.
+    func nudgeTempo(by delta: Double) {
+        let nudgeTime = BeatClock.now
+        updateTempo { $0.nudgeTempo(by: delta, at: nudgeTime) }
+    }
+
+    /// Applies a manual tempo change on the audio queue and publishes it
+    /// without waiting for the next analysis.
+    private func updateTempo(_ change: @escaping (BeatTracker) -> BeatAnalysis) {
         audioProcessingQueue.async { [weak self] in
             guard let self else { return }
-            let beat = self.beatTracker.tap(at: tapTime)
+            let beat = change(self.beatTracker)
             let publishDelay = self.pendingVisualization.withLockUnchecked { state in
                 state.frame.beat.bpm = beat.bpm
+                state.frame.beat.tempoNudge = beat.tempoNudge
                 state.frame.beat.clock = beat.clock
                 return state.reservePublish(now: BeatClock.now, minimumInterval: self.minimumPublishInterval)
             }
