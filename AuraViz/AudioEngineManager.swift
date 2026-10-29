@@ -1,7 +1,9 @@
 import Foundation
+import AppKit
 import AVFoundation
 import Accelerate
 import Combine
+import CoreAudio
 import CoreGraphics
 import CoreMedia
 import os
@@ -12,6 +14,21 @@ enum InputMode: String, CaseIterable, Identifiable {
     case microphone = "Microphone"
 
     var id: String { rawValue }
+}
+
+/// An app whose audio System Audio mode can capture on its own, such as the
+/// DJ software, instead of everything the Mac plays.
+struct CaptureApp: Identifiable, Hashable, Codable {
+    let bundleID: String
+    let name: String
+    /// Sending audio to an output right now; not persisted.
+    var isPlayingAudio = false
+
+    var id: String { bundleID }
+
+    private enum CodingKeys: String, CodingKey {
+        case bundleID, name
+    }
 }
 
 private struct AudioVisualizationFrame {
@@ -147,6 +164,26 @@ final class AudioEngineManager: NSObject, ObservableObject {
         }
     }
 
+    /// The app System Audio mode captures on its own; nil captures all system
+    /// audio. While the app isn't running, capture falls back to system-wide
+    /// and switches to the app when it launches. Set through `selectCaptureApp(bundleID:)`.
+    @Published private(set) var captureApp: CaptureApp? {
+        didSet {
+            if let captureApp, let data = try? JSONEncoder().encode(captureApp) {
+                UserDefaults.standard.set(data, forKey: SettingsKey.captureApp)
+            } else {
+                UserDefaults.standard.removeObject(forKey: SettingsKey.captureApp)
+            }
+            guard captureApp?.bundleID != oldValue?.bundleID else { return }
+            retargetSystemAudio()
+        }
+    }
+    /// Running apps eligible for `captureApp`, those playing audio first.
+    @Published private(set) var captureApps: [CaptureApp] = []
+    /// The app the running stream is limited to; nil while it captures all
+    /// system audio, including when `captureApp` isn't running.
+    @Published private(set) var capturedAppName: String?
+
     @Published var sensitivity: Double = 1.0 {
         didSet { UserDefaults.standard.set(sensitivity, forKey: SettingsKey.sensitivity) }
     }
@@ -224,6 +261,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     private var microphoneEngine: AVAudioEngine?
     private var systemAudioStream: SCStream?
     private var systemAudioStartTask: Task<Void, Never>?
+    private var systemAudioRetargetTask: Task<Void, Never>?
+    private var captureAppsRefreshTask: Task<Void, Never>?
+    private var workspaceObservers: Set<AnyCancellable> = []
     private var captureRequestID = UUID()
     private let audioProcessingQueue = DispatchQueue(
         label: "com.auraviz.system-audio",
@@ -299,10 +339,14 @@ final class AudioEngineManager: NSObject, ObservableObject {
         setupFFT()
         updateWindow()
         checkPermissions()
+        observeRunningApplications()
+        refreshCaptureApps()
     }
 
     deinit {
         systemAudioStartTask?.cancel()
+        systemAudioRetargetTask?.cancel()
+        captureAppsRefreshTask?.cancel()
         microphoneEngine?.stop()
         if let fftSetup {
             vDSP_destroy_fftsetup(fftSetup)
@@ -314,6 +358,10 @@ final class AudioEngineManager: NSObject, ObservableObject {
         if let mode = defaults.string(forKey: SettingsKey.inputMode).flatMap(InputMode.init(rawValue:)) {
             // Past the didSet: nothing is capturing yet, start() picks it up.
             _inputMode = Published(initialValue: mode)
+        }
+        if let data = defaults.data(forKey: SettingsKey.captureApp),
+           let app = try? JSONDecoder().decode(CaptureApp.self, from: data) {
+            _captureApp = Published(initialValue: app)
         }
         sensitivity = defaults.double(forKey: SettingsKey.sensitivity, in: Self.sensitivityRange) ?? sensitivity
         autoGainEnabled = defaults.object(forKey: SettingsKey.autoGainEnabled) as? Bool ?? autoGainEnabled
@@ -362,6 +410,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
         captureRequestID = UUID()
         systemAudioStartTask?.cancel()
         systemAudioStartTask = nil
+        systemAudioRetargetTask?.cancel()
+        systemAudioRetargetTask = nil
+        capturedAppName = nil
 
         if let stream = systemAudioStream {
             systemAudioStream = nil
@@ -426,6 +477,63 @@ final class AudioEngineManager: NSObject, ObservableObject {
         }
     }
 
+    /// Limits System Audio mode to the app with `bundleID` (nil: all system
+    /// audio). A running capture switches over without restarting.
+    func selectCaptureApp(bundleID: String?) {
+        guard let bundleID else {
+            captureApp = nil
+            return
+        }
+        guard let app = captureApps.first(where: { $0.bundleID == bundleID })
+                ?? captureApp.flatMap({ $0.bundleID == bundleID ? $0 : nil })
+        else { return }
+        captureApp = CaptureApp(bundleID: app.bundleID, name: app.name)
+    }
+
+    /// Reloads `captureApps` from ScreenCaptureKit's shareable content: regular
+    /// apps plus any background app playing audio, never AuraViz itself.
+    func refreshCaptureApps() {
+        guard CGPreflightScreenCaptureAccess() else {
+            captureApps = []
+            return
+        }
+        captureAppsRefreshTask?.cancel()
+        captureAppsRefreshTask = Task { [weak self] in
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(
+                false,
+                onScreenWindowsOnly: false
+            ) else { return }
+            let playingBundleIDs = Self.bundleIDsPlayingAudio()
+            let ownBundleID = Bundle.main.bundleIdentifier
+            var seenBundleIDs = Set<String>()
+            var apps: [CaptureApp] = []
+            for application in content.applications {
+                let bundleID = application.bundleIdentifier
+                let name = application.applicationName
+                guard !bundleID.isEmpty, !name.isEmpty, bundleID != ownBundleID,
+                      seenBundleIDs.insert(bundleID).inserted
+                else { continue }
+                // Audio from helper processes (com.example.App.helper) counts for the app.
+                let isPlaying = playingBundleIDs.contains {
+                    $0 == bundleID || $0.hasPrefix(bundleID + ".")
+                }
+                let isRegular = NSRunningApplication(processIdentifier: application.processID)?
+                    .activationPolicy == .regular
+                guard isRegular || isPlaying else { continue }
+                apps.append(CaptureApp(bundleID: bundleID, name: name, isPlayingAudio: isPlaying))
+            }
+            let sortedApps = apps.sorted {
+                $0.isPlayingAudio != $1.isPlayingAudio
+                    ? $0.isPlayingAudio
+                    : $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            guard let self, !Task.isCancelled else { return }
+            await MainActor.run {
+                self.captureApps = sortedApps
+            }
+        }
+    }
+
     func requestMicPermission() {
         AVCaptureDevice.requestAccess(for: .audio) { [weak self] granted in
             DispatchQueue.main.async {
@@ -480,6 +588,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
             resetSystemSampleRing()
         }
 
+        let selectedApp = captureApp
         systemAudioStartTask?.cancel()
         systemAudioStartTask = Task { [weak self] in
             guard let self else { return }
@@ -487,22 +596,11 @@ final class AudioEngineManager: NSObject, ObservableObject {
             do {
                 let content = try await SCShareableContent.excludingDesktopWindows(
                     false,
-                    onScreenWindowsOnly: true
+                    onScreenWindowsOnly: false
                 )
                 guard !Task.isCancelled, self.captureRequestID == requestID else { return }
-                guard let display = content.displays.first else {
-                    throw AudioCaptureError.noDisplay
-                }
-
-                let ownBundleID = Bundle.main.bundleIdentifier
-                let excludedApplications = content.applications.filter {
-                    $0.bundleIdentifier == ownBundleID
-                }
-                let filter = SCContentFilter(
-                    display: display,
-                    excludingApplications: excludedApplications,
-                    exceptingWindows: []
-                )
+                let target = try Self.systemAudioTarget(in: content, selectedApp: selectedApp)
+                let filter = target.filter
 
                 let configuration = SCStreamConfiguration()
                 configuration.width = 2
@@ -539,8 +637,16 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 await MainActor.run {
                     self.systemAudioPermissionGranted = true
                     self.captureError = nil
+                    self.capturedAppName = target.appName
                     self.isStarting = false
                     self.isRunning = true
+                    // Access may have just been granted; the list needs it.
+                    self.refreshCaptureApps()
+                }
+                // The app may be launching and not yet in the shareable content.
+                if let selectedApp, target.appName == nil,
+                   !NSRunningApplication.runningApplications(withBundleIdentifier: selectedApp.bundleID).isEmpty {
+                    await MainActor.run { self.retargetSystemAudio(waitingForLaunch: true) }
                 }
             } catch {
                 guard !Task.isCancelled, self.captureRequestID == requestID else { return }
@@ -552,6 +658,163 @@ final class AudioEngineManager: NSObject, ObservableObject {
                 }
             }
         }
+    }
+
+    /// The filter for `selectedApp` alone when it is running, otherwise for
+    /// all system audio except AuraViz, with the name of the app it is limited to.
+    private static func systemAudioTarget(
+        in content: SCShareableContent,
+        selectedApp: CaptureApp?
+    ) throws -> (filter: SCContentFilter, appName: String?) {
+        guard let display = content.displays.first else {
+            throw AudioCaptureError.noDisplay
+        }
+        if let selectedApp {
+            // Shareable content can trail a quit; a filter on a dead app would capture silence.
+            let applications = content.applications.filter {
+                $0.bundleIdentifier == selectedApp.bundleID
+                    && NSRunningApplication(processIdentifier: $0.processID)?.isTerminated == false
+            }
+            if let application = applications.first {
+                // Audio follows the included apps, wherever their windows are.
+                let filter = SCContentFilter(display: display, including: applications, exceptingWindows: [])
+                return (filter, application.applicationName)
+            }
+        }
+        let ownBundleID = Bundle.main.bundleIdentifier
+        let excludedApplications = content.applications.filter {
+            $0.bundleIdentifier == ownBundleID
+        }
+        let filter = SCContentFilter(
+            display: display,
+            excludingApplications: excludedApplications,
+            exceptingWindows: []
+        )
+        return (filter, nil)
+    }
+
+    /// Points the system-audio stream at the selected app, or back at all
+    /// system audio, without restarting it, so beat tracking keeps its lock.
+    /// `waitingForLaunch` keeps looking for a just-launched app for a few
+    /// seconds, until it shows up in the shareable content.
+    private func retargetSystemAudio(waitingForLaunch: Bool = false) {
+        guard inputMode == .systemAudio, isRunning || isStarting else { return }
+        guard isRunning, let stream = systemAudioStream else {
+            // Still connecting: start over so the start picks up the new target.
+            stop()
+            start()
+            return
+        }
+
+        let selectedApp = captureApp
+        let currentAppName = capturedAppName
+        let requestID = captureRequestID
+        systemAudioRetargetTask?.cancel()
+        systemAudioRetargetTask = Task { [weak self] in
+            do {
+                var found: (filter: SCContentFilter, appName: String?)?
+                for attempt in 1...(waitingForLaunch ? 10 : 1) {
+                    if attempt > 1 {
+                        try await Task.sleep(for: .seconds(1))
+                    }
+                    let content = try await SCShareableContent.excludingDesktopWindows(
+                        false,
+                        onScreenWindowsOnly: false
+                    )
+                    found = try Self.systemAudioTarget(in: content, selectedApp: selectedApp)
+                    if selectedApp == nil || found?.appName != nil { break }
+                }
+
+                // Still system-wide and should stay so: nothing to change.
+                guard let target = found, target.appName != nil || currentAppName != nil else { return }
+                guard let self, !Task.isCancelled,
+                      await MainActor.run(body: { self.captureRequestID == requestID && self.systemAudioStream === stream })
+                else { return }
+                try await stream.updateContentFilter(target.filter)
+                await MainActor.run {
+                    guard self.captureRequestID == requestID else { return }
+                    self.capturedAppName = target.appName
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // The stream couldn't switch over; restarting applies the target.
+                guard let self else { return }
+                await MainActor.run {
+                    guard self.captureRequestID == requestID else { return }
+                    self.stop()
+                    self.start()
+                }
+            }
+        }
+    }
+
+    /// Keeps the app list current and follows the selected app as it
+    /// launches (capture switches to it) and quits (back to system-wide).
+    private func observeRunningApplications() {
+        let center = NSWorkspace.shared.notificationCenter
+        Publishers.Merge(
+            center.publisher(for: NSWorkspace.didLaunchApplicationNotification),
+            center.publisher(for: NSWorkspace.didTerminateApplicationNotification)
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] notification in
+            self?.runningApplicationsChanged(notification)
+        }
+        .store(in: &workspaceObservers)
+    }
+
+    private func runningApplicationsChanged(_ notification: Notification) {
+        let didLaunch = notification.name == NSWorkspace.didLaunchApplicationNotification
+        refreshCaptureApps()
+        if didLaunch {
+            // A launching app joins the shareable content once it connects to the window server.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                self?.refreshCaptureApps()
+            }
+        }
+        guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              let captureApp, application.bundleIdentifier == captureApp.bundleID
+        else { return }
+        retargetSystemAudio(waitingForLaunch: didLaunch)
+    }
+
+    /// Bundle IDs of processes sending audio to an output right now, from Core
+    /// Audio's process objects (macOS 14.2+; empty before).
+    private static func bundleIDsPlayingAudio() -> Set<String> {
+        guard #available(macOS 14.2, *) else { return [] }
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyProcessObjectList,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var processes = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &processes) == noErr else { return [] }
+
+        var bundleIDs = Set<String>()
+        for process in processes {
+            var isRunningOutput: UInt32 = 0
+            var flagSize = UInt32(MemoryLayout<UInt32>.size)
+            address.mSelector = kAudioProcessPropertyIsRunningOutput
+            guard AudioObjectGetPropertyData(process, &address, 0, nil, &flagSize, &isRunningOutput) == noErr,
+                  isRunningOutput != 0
+            else { continue }
+
+            var bundleID: Unmanaged<CFString>?
+            var stringSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+            address.mSelector = kAudioProcessPropertyBundleID
+            let status = withUnsafeMutablePointer(to: &bundleID) {
+                AudioObjectGetPropertyData(process, &address, 0, nil, &stringSize, $0)
+            }
+            // Core Audio hands back a retained string.
+            if status == noErr, let bundleID = bundleID?.takeRetainedValue() as String?, !bundleID.isEmpty {
+                bundleIDs.insert(bundleID)
+            }
+        }
+        return bundleIDs
     }
 
     private func processSystemAudioBuffer(_ sampleBuffer: CMSampleBuffer) {
@@ -1110,7 +1373,15 @@ extension AudioEngineManager: SCStreamOutput, SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         DispatchQueue.main.async { [weak self, weak stream] in
             guard let self, let stream, self.systemAudioStream === stream else { return }
+            // The captured app quit and took its stream with it: carry on system-wide.
+            if self.capturedAppName != nil, let captureApp = self.captureApp,
+               NSRunningApplication.runningApplications(withBundleIdentifier: captureApp.bundleID).isEmpty {
+                self.stop()
+                self.start()
+                return
+            }
             self.systemAudioStream = nil
+            self.capturedAppName = nil
             self.isStarting = false
             self.isRunning = false
             self.captureError = "System audio capture stopped: \(error.localizedDescription)"

@@ -18,6 +18,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
 
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
+    - **Capture source** — click the status pill next to the input switch to capture only one app, such as your DJ software (rekordbox, Serato, Traktor, djay…), instead of all system audio, so notifications and other apps stay out of the visuals. The list comes from `ScreenCaptureKit`'s shareable content (regular apps, plus background apps that are playing); apps playing audio right now are listed first and marked **Playing** (macOS 14.2+). While the chosen app isn't running, AuraViz captures all system audio (the pill turns orange) and switches to the app when it launches, without restarting the stream; when it quits, capture falls back to system-wide. The HUD shows the captured app's name in place of SYSTEM AUDIO.
   - **Microphone mode** — optional live mic via `AVAudioEngine`.
   - Both live inputs use a 4096-point FFT via `Accelerate/vDSP`, a 64-band log-spaced spectrum, RMS volume, waveform samples, and dominant-frequency detection.
 
@@ -30,7 +31,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
-  - Mode, theme, Circle FPS, input, Auto Gain, Sensitivity, Smoothing, Beat reactivity, every mode's drum reactivity and the lyrics text and overlay toggle are remembered across launches.
+  - Mode, theme, Circle FPS, input, capture source, Auto Gain, Sensitivity, Smoothing, Beat reactivity, every mode's drum reactivity and the lyrics text and overlay toggle are remembered across launches.
 
 - **Presets** (header **Presets** button and the **Presets** menu)
   - Built-in: **Chill** (Waves, Ocean, high smoothing) · **Peak Time** (Circle, Cyberpunk, low smoothing, 60 FPS) · **Retro** (Bars, Y2K Chrome)

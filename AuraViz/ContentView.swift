@@ -419,7 +419,7 @@ struct ContentView: View {
                 .font(.system(size: 10, weight: .black, design: .monospaced))
                 .tracking(1)
                 .foregroundStyle(.white.opacity(0.85))
-            Text("•  \(audio.inputMode.rawValue.uppercased())").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
+            Text("•  \((audio.capturedAppName ?? audio.inputMode.rawValue).uppercased())").font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(.black.opacity(0.45), in: Capsule())
@@ -597,11 +597,7 @@ struct ContentView: View {
                             .controlSize(.small)
                             .tint(.cyan)
                     } else {
-                        inputStatusBadge(
-                            icon: "speaker.wave.3.fill",
-                            title: audio.isStarting ? "Connecting…" : (audio.isRunning ? "System Audio Active" : "System Audio Ready"),
-                            color: .cyan
-                        )
+                        captureSourceMenu
                     }
                 }
 
@@ -647,6 +643,77 @@ struct ContentView: View {
         }
         .padding(16)
         .glassCard()
+    }
+
+    /// System Audio's status, opening a picker that limits capture to one app
+    /// (the DJ software) or takes all system audio.
+    private var captureSourceMenu: some View {
+        Menu {
+            Picker("Capture", selection: Binding(
+                get: { audio.captureApp?.bundleID },
+                set: { audio.selectCaptureApp(bundleID: $0) }
+            )) {
+                Text("All System Audio").tag(String?.none)
+                Section("Apps") {
+                    ForEach(audio.captureApps) { app in
+                        Text(app.isPlayingAudio ? "\(app.name) — Playing" : app.name).tag(Optional(app.bundleID))
+                    }
+                    // Keeps a selected app that isn't running checked and visible.
+                    if let selected = audio.captureApp, !audio.captureApps.contains(where: { $0.id == selected.id }) {
+                        Text("\(selected.name) (Not Running)").tag(Optional(selected.bundleID))
+                    }
+                }
+            }
+            .pickerStyle(.inline)
+            if audio.captureApps.isEmpty && audio.captureApp == nil {
+                Text("No apps found")
+            }
+            Divider()
+            Button("Refresh App List") { audio.refreshCaptureApps() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: captureSourceIcon).foregroundStyle(isCaptureFallback ? .orange : .cyan)
+                Text(captureSourceTitle)
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.white.opacity(0.08), in: Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(captureSourceHelp)
+        .accessibilityLabel("Capture source")
+        .accessibilityValue(captureSourceTitle)
+    }
+
+    /// An app is selected but isn't running, so capture took all system audio.
+    private var isCaptureFallback: Bool {
+        audio.isRunning && audio.captureApp != nil && audio.capturedAppName == nil
+    }
+
+    private var captureSourceIcon: String {
+        if isCaptureFallback { return "exclamationmark.triangle.fill" }
+        return audio.captureApp == nil ? "speaker.wave.3.fill" : "app.badge.fill"
+    }
+
+    private var captureSourceTitle: String {
+        if audio.isStarting { return "Connecting…" }
+        if let capturedAppName = audio.capturedAppName { return "Capturing \(capturedAppName)" }
+        if let captureApp = audio.captureApp {
+            return audio.isRunning ? "System Audio · \(captureApp.name) Not Running" : "\(captureApp.name) Ready"
+        }
+        return audio.isRunning ? "System Audio Active" : "System Audio Ready"
+    }
+
+    private var captureSourceHelp: String {
+        guard let captureApp = audio.captureApp else {
+            return "Capturing all system audio. Pick an app, such as your DJ software, to capture only its audio."
+        }
+        return "Captures only \(captureApp.name)'s audio. While it isn't running, all system audio is captured and capture switches to it when it launches."
     }
 
     /// How mode switches and preset recalls hand over, and whether they wait

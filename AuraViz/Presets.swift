@@ -8,6 +8,7 @@ enum SettingsKey {
     static let theme = "colorTheme"
     static let circleFramesPerSecond = "circleFramesPerSecond"
     static let inputMode = "inputMode"
+    static let captureApp = "captureApp"
     static let sensitivity = "sensitivity"
     static let autoGainEnabled = "autoGainEnabled"
     static let smoothing = "smoothing"
