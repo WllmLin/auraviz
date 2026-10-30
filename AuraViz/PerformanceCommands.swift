@@ -35,8 +35,10 @@ private struct PerformanceMenu: View {
     @ViewBuilder
     private var shortcuts: some View {
         ForEach(Array(VisualMode.allCases.enumerated()), id: \.element) { index, mode in
+            // Unchecked during a vibe kill, so even the current mode's key
+            // brings the show back.
             Toggle(mode.rawValue, isOn: Binding(
-                get: { performance.targetLook.mode == mode },
+                get: { !performance.isVibeKilled && performance.targetLook.mode == mode },
                 set: { if $0 { performance.switchMode(to: mode, clock: audio.transitionClock) } }
             ))
             .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [])
@@ -57,6 +59,9 @@ private struct PerformanceMenu: View {
             set: { isOn in ignoringKeyRepeat { performance.isBlackedOut = isOn } }
         ))
         .keyboardShortcut(.space, modifiers: [])
+        // Only enters, so a panicked double press doesn't undo it; a mode key exits.
+        Button("Vibe Kill (Ambient Loop)") { performance.isVibeKilled = true }
+            .keyboardShortcut("k", modifiers: [])
         // Holding S is handled by PerformanceState's key monitor; the menu
         // item shows the key and gives a single flash when clicked.
         Button("Strobe (Hold)") { performance.strobeOnce() }
@@ -111,6 +116,7 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("⇧T", "Previous theme"),
     ("L", "Lyrics overlay on / off"),
     ("Space", "Blackout (audio keeps running)"),
+    ("K", "Vibe kill: fade to a calm ambient loop (1 – 6 exits)"),
     ("S hold", "Strobe, at most 3 flashes/s"),
     ("B", "Tap tempo"),
     ("[ / ]", "Nudge tempo −/+ 0.5 BPM"),

@@ -118,6 +118,9 @@ struct ContentView: View {
                     if performance.isBlackedOut {
                         blackoutBadge
                     }
+                    if performance.isVibeKilled {
+                        vibeKillBadge
+                    }
                     if let queuedLook = performance.queuedLook {
                         queuedBadge(queuedLook)
                     }
@@ -308,6 +311,9 @@ struct ContentView: View {
                     }
                     if performance.isBlackedOut {
                         blackoutBadge
+                    }
+                    if performance.isVibeKilled {
+                        vibeKillBadge
                     }
                     if let queuedLook = performance.queuedLook {
                         queuedBadge(queuedLook)
@@ -502,6 +508,24 @@ struct ContentView: View {
         .help("The stage is blacked out. Click or press Space to bring it back.")
         .accessibilityLabel("Blackout on")
         .accessibilityHint("Brings the stage back")
+    }
+
+    private var vibeKillBadge: some View {
+        Button {
+            performance.isVibeKilled = false
+        } label: {
+            Text("AMBIENT")
+                .font(.system(size: 10, weight: .black, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Color.gray.opacity(0.45), in: Capsule())
+                .overlay(Capsule().stroke(.white.opacity(0.14), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Vibe kill: the stage shows a calm ambient loop. Click or press 1–6 to bring the show back.")
+        .accessibilityLabel("Vibe kill on")
+        .accessibilityHint("Brings the show back")
     }
 
     /// A quantized switch waiting for its beat or bar; clicking lands it now.

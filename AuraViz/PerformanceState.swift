@@ -6,6 +6,7 @@ import SwiftUI
 /// visual and its shortcuts work from either window.
 final class PerformanceState: ObservableObject {
     static let blackoutFadeDuration: TimeInterval = 0.3
+    static let vibeKillFadeDuration: TimeInterval = 1.0
     /// At most three flashes in any one-second window, the photosensitive
     /// seizure limit (WCAG 2.3.1). Comfortably over 1/3 s so display-frame
     /// jitter can't squeeze a fourth flash into a window.
@@ -50,6 +51,9 @@ final class PerformanceState: ObservableObject {
     }
     /// Fades the stage to black; audio and analysis keep running.
     @Published var isBlackedOut = false
+    /// Covers the stage with a dim, neutral ambient loop for awkward silences
+    /// and requests; audio keeps running. Any look change brings the show back.
+    @Published var isVibeKilled = false
     /// `BeatClock.now` of the most recent strobe flash.
     @Published private(set) var strobeFlashTime: TimeInterval = -.infinity
     @Published var isShowingShortcuts = false
@@ -167,7 +171,9 @@ final class PerformanceState: ObservableObject {
     /// Hands the stage over to `target` through `transition`: now, or, while
     /// quantized and `clock` has a tempo, on its next beat or bar. A later
     /// call replaces a queued look; asking for the current look cancels it.
+    /// Either way it ends a vibe kill.
     func show(_ target: StageLook, clock: BeatClock?) {
+        isVibeKilled = false
         queueTimer?.invalidate()
         queueTimer = nil
         guard target != look else {

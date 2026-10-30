@@ -336,13 +336,17 @@ private struct WipeEdge: View {
     }
 }
 
-/// Strobe flashes and blackout from the shared performance state, laid over
-/// a stage so the preview and the output show the same thing.
+/// Vibe kill, strobe flashes and blackout from the shared performance state,
+/// laid over a stage so the preview and the output show the same thing.
 struct StageEffectsOverlay: View {
     @EnvironmentObject var performance: PerformanceState
 
     var body: some View {
         ZStack {
+            // Below the strobe and blackout, which stay deliberate actions.
+            AmbientLoop(isActive: performance.isVibeKilled)
+                .opacity(performance.isVibeKilled ? 1 : 0)
+                .animation(.easeInOut(duration: PerformanceState.vibeKillFadeDuration), value: performance.isVibeKilled)
             Color.white
                 .keyframeAnimator(initialValue: 0.0, trigger: performance.strobeFlashTime) { content, opacity in
                     content.opacity(opacity)
@@ -358,6 +362,53 @@ struct StageEffectsOverlay: View {
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// The vibe kill's stage: one dim, neutral orb on black that breathes and
+/// drifts slowly on its own clock, ignoring the audio, so nothing on stage
+/// reacts while the room is quiet or a request is being handled. Freezes
+/// once inactive, while it fades out.
+private struct AmbientLoop: View {
+    var isActive: Bool
+
+    /// Seconds per breath.
+    private static let breathPeriod = 8.0
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !isActive)) { timeline in
+            let t = BeatClock.time(for: timeline.date)
+            Canvas { context, size in
+                draw(in: context, size: size, time: t)
+            }
+        }
+        .background(.black)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func draw(in context: GraphicsContext, size: CGSize, time t: Double) {
+        let breath = 0.5 - 0.5 * cos(2 * .pi * t / Self.breathPeriod)
+        let side = min(size.width, size.height)
+        let center = CGPoint(
+            x: size.width * (0.5 + 0.03 * CGFloat(sin(0.11 * t))),
+            y: size.height * (0.5 + 0.03 * CGFloat(sin(0.07 * t + 1.3)))
+        )
+        let r = side * CGFloat(0.34 + 0.04 * breath)
+        let alpha = 0.10 + 0.08 * breath
+        let color = Color(white: 0.82)
+        // Same falloff as the stage orbs.
+        let gradient = Gradient(stops: [
+            .init(color: color.opacity(alpha), location: 0),
+            .init(color: color.opacity(alpha * 0.72), location: 0.25),
+            .init(color: color.opacity(alpha * 0.36), location: 0.5),
+            .init(color: color.opacity(alpha * 0.11), location: 0.75),
+            .init(color: color.opacity(0), location: 1),
+        ])
+        context.fill(
+            Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
+            with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: r)
+        )
     }
 }
 
