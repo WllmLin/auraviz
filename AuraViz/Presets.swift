@@ -18,6 +18,7 @@ enum SettingsKey {
     static let lyricsEnabled = "lyricsEnabled"
     static let stageTransition = "stageTransition"
     static let transitionQuantize = "transitionQuantize"
+    static let overlayFont = "overlayFont"
 }
 
 extension UserDefaults {

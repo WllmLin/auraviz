@@ -780,6 +780,7 @@ struct ContentView: View {
             .toggleStyle(.button)
             .controlSize(.small)
             .help("Show the text as kinetic type over the stage and output (L)")
+            overlayFontMenu
             TextField("Lyrics, track title or shout-out", text: $performance.lyricsText)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -788,6 +789,37 @@ struct ContentView: View {
                 .onExitCommand { isLyricsFieldFocused = false }
                 .help("Return or Esc finishes editing. Performance shortcuts are off while you type.")
         }
+    }
+
+    /// Bundled display font for the overlay text; each entry previews in its
+    /// own face, and the button shows the current pick in its face too.
+    private var overlayFontMenu: some View {
+        Menu {
+            Picker("Overlay Font", selection: $performance.overlayFont) {
+                ForEach(OverlayFont.allCases) { font in
+                    Text(font.rawValue)
+                        .font(font.swiftUIFont(size: 13, weight: .regular))
+                        .tag(font)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            HStack(spacing: 6) {
+                Text(performance.overlayFont.rawValue)
+                    .font(performance.overlayFont.swiftUIFont(size: 11, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.white.opacity(0.08), in: Capsule())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Font for the lyrics overlay, from the pack bundled with AuraViz")
+        .accessibilityLabel("Overlay font")
+        .accessibilityValue(performance.overlayFont.rawValue)
     }
 
     private var sensitivityControl: some View {

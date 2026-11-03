@@ -68,6 +68,10 @@ final class PerformanceState: ObservableObject {
     @Published var isLyricsEnabled = false {
         didSet { UserDefaults.standard.set(isLyricsEnabled, forKey: SettingsKey.lyricsEnabled) }
     }
+    /// Display font for the overlay text, from the bundled pack.
+    @Published var overlayFont: OverlayFont = .systemRounded {
+        didSet { UserDefaults.standard.set(overlayFont.rawValue, forKey: SettingsKey.overlayFont) }
+    }
     /// Set while the lyrics field has focus, so the keys type into it.
     @Published var isEditingLyrics = false
 
@@ -140,6 +144,9 @@ final class PerformanceState: ObservableObject {
         }
         lyricsText = defaults.string(forKey: SettingsKey.lyricsText) ?? lyricsText
         isLyricsEnabled = defaults.bool(forKey: SettingsKey.lyricsEnabled)
+        if let overlayFont = defaults.string(forKey: SettingsKey.overlayFont).flatMap(OverlayFont.init(rawValue:)) {
+            self.overlayFont = overlayFont
+        }
     }
 
     func cycleTheme(by offset: Int) {

@@ -16,7 +16,7 @@ mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources"
 $TC/swiftc -O -whole-module-optimization -sdk $SDK -target arm64-apple-macosx14.0 $DEFINES $LIBS \
   -o "$PROJECT_DIR/build/AuraViz.app/Contents/MacOS/AuraViz" \
   "$SRC/AuraVizApp.swift" "$SRC/ContentView.swift" "$SRC/AudioEngineManager.swift" "$SRC/BeatTracker.swift" "$SRC/Theme.swift" \
-  "$SRC/PerformanceState.swift" "$SRC/PerformanceCommands.swift" "$SRC/OutputWindow.swift" "$SRC/Presets.swift" \
+  "$SRC/PerformanceState.swift" "$SRC/PerformanceCommands.swift" "$SRC/OutputWindow.swift" "$SRC/Presets.swift" "$SRC/FontCatalog.swift" \
   "$SRC/Visualizers/CircularVisualizerView.swift" "$SRC/Visualizers/WaveVisualizerView.swift" "$SRC/Visualizers/Y2KBarVisualizerView.swift" \
   "$SRC/Visualizers/TunnelVisualizerView.swift" "$SRC/Visualizers/ParticleVisualizerView.swift" "$SRC/Visualizers/LaserVisualizerView.swift" "$SRC/Visualizers/LyricsOverlayView.swift" \
   "$SRC/Visualizers/VisualizerStage.swift"
@@ -39,6 +39,7 @@ cat > "$PROJECT_DIR/build/AuraViz.app/Contents/Info.plist" << 'PLIST'
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSMicrophoneUsageDescription</key><string>AuraViz needs microphone access to visualize live audio.</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+    <key>ATSApplicationFontsPath</key><string>Fonts</string>
 </dict>
 </plist>
 PLIST
@@ -61,6 +62,10 @@ trap 'rm -rf "$ICON_WORK_DIR"' EXIT
 mkdir -p "$ICON_WORK_DIR/AppIcon.iconset"
 cp "$SRC/Assets.xcassets/AppIcon.appiconset"/icon_*.png "$ICON_WORK_DIR/AppIcon.iconset/"
 iconutil -c icns "$ICON_WORK_DIR/AppIcon.iconset" -o "$PROJECT_DIR/build/AuraViz.app/Contents/Resources/AppIcon.icns"
+
+# Bundled overlay font pack (registered at launch; see FontCatalog.swift).
+mkdir -p "$PROJECT_DIR/build/AuraViz.app/Contents/Resources/Fonts"
+cp "$SRC/Resources/Fonts/"*.ttf "$PROJECT_DIR/build/AuraViz.app/Contents/Resources/Fonts/"
 
 echo "APPLAura" > "$PROJECT_DIR/build/AuraViz.app/Contents/PkgInfo"
 codesign --force --deep --sign - "$PROJECT_DIR/build/AuraViz.app" 2>&1 | head

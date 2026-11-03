@@ -26,6 +26,7 @@ files = [
     ("PerformanceCommands.swift", "AuraViz/PerformanceCommands.swift"),
     ("OutputWindow.swift", "AuraViz/OutputWindow.swift"),
     ("Presets.swift", "AuraViz/Presets.swift"),
+    ("FontCatalog.swift", "AuraViz/FontCatalog.swift"),
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
     ("Y2KBarVisualizerView.swift", "AuraViz/Visualizers/Y2KBarVisualizerView.swift"),
@@ -35,6 +36,7 @@ files = [
     ("LyricsOverlayView.swift", "AuraViz/Visualizers/LyricsOverlayView.swift"),
     ("VisualizerStage.swift", "AuraViz/Visualizers/VisualizerStage.swift"),
     ("Assets.xcassets", "AuraViz/Assets.xcassets"),
+    ("Fonts", "AuraViz/Resources/Fonts"),
     ("AuraViz.entitlements", "AuraViz/AuraViz.entitlements"),
 ]
 
@@ -44,6 +46,7 @@ main_group_id = get("MainGroup")
 products_group_id = get("Products")
 auraviz_group_id = get("AuraVizGroup")
 visualizers_group_id = get("VisualizersGroup")
+resources_group_id = get("ResourcesGroup")
 target_id = get("TargetAuraViz")
 product_ref_id = get("ProductAuraVizApp")
 build_config_list_proj = get("ConfigListProj")
@@ -62,7 +65,7 @@ build_files = {}
 for name, path in files:
     file_refs[name] = get(f"FileRef_{name}")
     # build files only for sources/resources
-    if name.endswith(".swift") or name.endswith(".xcassets"):
+    if name.endswith(".swift") or name.endswith(".xcassets") or name == "Fonts":
         build_files[name] = get(f"BuildFile_{name}")
 
 # Build config content
@@ -93,6 +96,8 @@ for name, path in files:
         typ = "sourcecode.swift"
     elif name.endswith(".xcassets"):
         typ = "folder.assetcatalog"
+    elif name == "Fonts":
+        typ = "folder"
     elif name.endswith(".entitlements"):
         typ = "text.plist.entitlements"
     else:
@@ -137,7 +142,9 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['PerformanceCommands.swift']} /* PerformanceCommands.swift */,
 \t\t\t\t{file_refs['OutputWindow.swift']} /* OutputWindow.swift */,
 \t\t\t\t{file_refs['Presets.swift']} /* Presets.swift */,
+\t\t\t\t{file_refs['FontCatalog.swift']} /* FontCatalog.swift */,
 \t\t\t\t{visualizers_group_id} /* Visualizers */,
+\t\t\t\t{resources_group_id} /* Resources */,
 \t\t\t\t{file_refs['Assets.xcassets']} /* Assets.xcassets */,
 \t\t\t\t{file_refs['AuraViz.entitlements']} /* AuraViz.entitlements */,
 \t\t\t);
@@ -157,6 +164,14 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['VisualizerStage.swift']} /* VisualizerStage.swift */,
 \t\t\t);
 \t\t\tpath = Visualizers;
+\t\t\tsourceTree = "<group>";
+\t\t}};
+\t\t{resources_group_id} /* Resources */ = {{
+\t\t\tisa = PBXGroup;
+\t\t\tchildren = (
+\t\t\t\t{file_refs['Fonts']} /* Fonts */,
+\t\t\t);
+\t\t\tpath = Resources;
 \t\t\tsourceTree = "<group>";
 \t\t}};
 """
@@ -224,6 +239,7 @@ pbx += f"""\t\t{resources_phase} /* Resources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 \t\t\t\t{build_files['Assets.xcassets']} /* Assets.xcassets in Resources */,
+\t\t\t\t{build_files['Fonts']} /* Fonts in Resources */,
 \t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};
@@ -237,7 +253,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;

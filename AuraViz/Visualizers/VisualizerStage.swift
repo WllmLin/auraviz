@@ -11,13 +11,15 @@ struct VisualizerStage: View {
     var framesPerSecond: Int = 30
     /// Kinetic type laid over every mode; nil hides it.
     var lyrics: String? = nil
+    /// Display font for the overlay type.
+    var lyricsFont: OverlayFont = .systemRounded
 
     var body: some View {
         ZStack {
             StageOrbs(audio: audio, theme: theme, isActive: audio.isRunning)
             visualizer
             if let lyrics {
-                LyricsOverlay(audio: audio, text: lyrics, theme: theme, isActive: audio.isRunning)
+                LyricsOverlay(audio: audio, text: lyrics, theme: theme, isActive: audio.isRunning, font: lyricsFont)
                     .transition(.opacity)
             }
         }
@@ -201,7 +203,7 @@ struct PerformanceStage: View {
             let effect = StageLayerEffect(handoff: handoff, progress: progress, isIncoming: isIncoming)
             // Both layers show the current lyrics, so a transition only
             // recolors them.
-            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics)
+            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics, lyricsFont: performance.overlayFont)
                 .scaleEffect(effect.scale)
                 .visualEffect { content, proxy in
                     content.offset(x: effect.offset * proxy.size.width)

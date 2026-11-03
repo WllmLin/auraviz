@@ -16,6 +16,9 @@ struct LyricsOverlay: View {
     var text: String
     var theme: ColorTheme
     var isActive: Bool
+    /// Display font from the bundled pack; single-weight faces keep the
+    /// scale and kick motion but stay on their only weight.
+    var font: OverlayFont = .systemRounded
 
     /// Shared so every stage layer, in the preview and the output, draws the
     /// text in the same state and a crossfade doesn't show two copies.
@@ -43,7 +46,7 @@ struct LyricsOverlay: View {
     }
 
     private func draw(in context: GraphicsContext, size: CGSize, now: TimeInterval, pulse: LyricsPulse, palette: LyricsPalette) {
-        guard let layout = layout.layout(for: text, size: size, context: context) else { return }
+        guard let layout = layout.layout(for: text, size: size, font: font, context: context) else { return }
         let fontSize = layout.fontSize
         let globalKick = pulse.kick(at: now)
         context.drawLayer { layer in
@@ -59,7 +62,7 @@ struct LyricsOverlay: View {
                 let scale = min(Self.maximumScale, 0.92 + 0.22 * swell + 0.3 * kick)
                 let weight = Self.weights[Int((intensity * Double(Self.weights.count - 1)).rounded())]
 
-                var resolved = layer.resolve(Text(glyph.character).font(.system(size: fontSize, weight: weight, design: .rounded)))
+                var resolved = layer.resolve(Text(glyph.character).font(font.swiftUIFont(size: fontSize, weight: weight)))
                 resolved.shading = .color(palette.color(at: glyph.position, heat: 0.4 * kick).opacity(0.8 + 0.2 * intensity))
                 var glyphContext = layer
                 glyphContext.translateBy(x: glyph.center.x, y: glyph.center.y - CGFloat(kick) * fontSize * 0.08)
@@ -169,7 +172,7 @@ private struct LyricsLayout {
     var fontSize: CGFloat
     var glyphs: [Glyph]
 
-    init?(text: String, size: CGSize, context: GraphicsContext) {
+    init?(text: String, size: CGSize, font: OverlayFont, context: GraphicsContext) {
         let words = text.split(whereSeparator: \.isWhitespace).map { $0.map(String.init) }
         guard !words.isEmpty, size.width > 0, size.height > 0 else { return nil }
 
@@ -177,15 +180,15 @@ private struct LyricsLayout {
         var widths: [String: CGFloat] = [:]
         func width(of character: String) -> CGFloat {
             if let width = widths[character] { return width }
-            let font = Font.system(size: reference, weight: .heavy, design: .rounded)
-            let width = context.resolve(Text(character).font(font)).measure(in: CGSize(width: CGFloat.infinity, height: .infinity)).width
+            let measureFont = font.swiftUIFont(size: reference, weight: .heavy)
+            let width = context.resolve(Text(character).font(measureFont)).measure(in: CGSize(width: CGFloat.infinity, height: .infinity)).width
                 + Self.tracking * reference
             widths[character] = width
             return width
         }
         let wordWidths = words.map { $0.reduce(0) { $0 + width(of: $1) } }
         let spaceWidth = 0.28 * reference
-        let lineHeight = context.resolve(Text("Hg").font(.system(size: reference, weight: .heavy, design: .rounded)))
+        let lineHeight = context.resolve(Text("Hg").font(font.swiftUIFont(size: reference, weight: .heavy)))
             .measure(in: CGSize(width: CGFloat.infinity, height: .infinity)).height * Self.lineSpacing
 
         // Greedy wrap into lines no wider than `maxWidth` reference points.
@@ -262,18 +265,20 @@ private struct LyricsLayout {
     }
 }
 
-/// Keeps the last layout, so it is only rebuilt when the text or the stage
-/// size changes. A class so the canvas can fill it while drawing.
+/// Keeps the last layout, so it is only rebuilt when the text, the font or
+/// the stage size changes. A class so the canvas can fill it while drawing.
 private final class LyricsLayoutCache {
     private var text: String?
     private var size: CGSize = .zero
+    private var font: OverlayFont?
     private var layout: LyricsLayout?
 
-    func layout(for text: String, size: CGSize, context: GraphicsContext) -> LyricsLayout? {
-        if text != self.text || size != self.size {
+    func layout(for text: String, size: CGSize, font: OverlayFont, context: GraphicsContext) -> LyricsLayout? {
+        if text != self.text || size != self.size || font != self.font {
             self.text = text
             self.size = size
-            layout = LyricsLayout(text: text, size: size, context: context)
+            self.font = font
+            layout = LyricsLayout(text: text, size: size, font: font, context: context)
         }
         return layout
     }

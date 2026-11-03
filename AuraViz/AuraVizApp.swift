@@ -17,6 +17,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @main
 struct AuraVizApp: App {
+    init() {
+        // Bundled overlay fonts must exist before the first view measures text.
+        FontRegistrar.registerBundledFonts()
+    }
+
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var audio = AudioEngineManager()
     @StateObject private var performance = PerformanceState()
