@@ -19,6 +19,8 @@ enum SettingsKey {
     static let stageTransition = "stageTransition"
     static let transitionQuantize = "transitionQuantize"
     static let overlayFont = "overlayFont"
+    static let imageOverlays = "imageOverlays"
+    static let imageOverlaysEnabled = "imageOverlaysEnabled"
 }
 
 extension UserDefaults {

@@ -16,6 +16,8 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
 
 - **Lyrics overlay** — type lyrics, a track title or a shout-out into the **Lyrics** field under the sliders and toggle **Lyrics** (or press **L**) to lay it over any mode as big kinetic type, wrapped to fill the middle of the preview and output. Each character swells and thickens (regular → black weight) with the RMS volume on a wave that sweeps through the text (once per bar at full beat reactivity), every kick ripples out from the middle and punches the characters up, and the type runs along the theme's gradient with a kick-driven glow. Kick punches keep to the strobe cap; blackout and strobe cover it like the rest of the stage. Return, Esc or a click on the stage finishes editing; the single-key shortcuts are off while you type.
 
+- **Image overlays** — lay logos, artwork or a sponsor slide over any mode, in the preview and the output. Click **Add Image…** in the **Images** row under the lyrics (or **Performance → Add Overlay Image…**), or drop image files on the preview; toggle **Images** (or press **I**) to fade them all in or out. Click an image's thumbnail to set its **placement** (center, a corner, or **Fill Stage** to cover the stage), **size**, **opacity**, **blend** (**Normal** keeps PNG transparency, **Screen** drops a black background so a logo on black floats over the visuals, **Add** adds the image's light for glowing artwork) and **beat pulse** (how far it punches up on each beat, scaled by Beat reactivity and kept to the strobe cap); right-click it to show / hide, bring to front, send to back or remove it. Images stack in thumbnail order under the lyrics; blackout, strobe and vibe kill cover them like the rest of the stage. Added files are copied to `~/Library/Application Support/com.auraviz.app/Overlays/`, so they stay put if the originals move, and are decoded at up to 3840 px on the long side (only the first frame of an animated GIF shows).
+
 - **Audio input**
   - **System Audio mode** (default) — real-time audio from music, video, browsers, and other apps via `ScreenCaptureKit`. AuraViz excludes its own process audio and captures only a minimal 2×2 video stream to keep overhead low.
     - **Capture source** — click the status pill next to the input switch to capture only one app, such as your DJ software (rekordbox, Serato, Traktor, djay…), instead of all system audio, so notifications and other apps stay out of the visuals. The list comes from `ScreenCaptureKit`'s shareable content (regular apps, plus background apps that are playing); apps playing audio right now are listed first and marked **Playing** (macOS 14.2+). While the chosen app isn't running, AuraViz captures all system audio (the pill turns orange) and switches to the app when it launches, without restarting the stream; when it quits, capture falls back to system-wide. The HUD shows the captured app's name in place of SYSTEM AUDIO.
@@ -31,7 +33,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
-  - Mode, theme, Circle FPS, input, capture source, Auto Gain, Sensitivity, Smoothing, Beat reactivity, every mode's drum reactivity and the lyrics text and overlay toggle are remembered across launches.
+  - Mode, theme, Circle FPS, input, capture source, Auto Gain, Sensitivity, Smoothing, Beat reactivity, every mode's drum reactivity, the lyrics text and overlay toggle, and the overlay images with their settings and toggle are remembered across launches.
 
 - **Presets** (header **Presets** button and the **Presets** menu)
   - Built-in: **Chill** (Waves, Ocean, high smoothing) · **Peak Time** (Circle, Cyberpunk, low smoothing, 60 FPS) · **Retro** (Bars, Y2K Chrome)
@@ -39,7 +41,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Recalling a preset crossfades the preview and output to the new look over 0.5 s; the input source is left alone.
 
 - **Performance shortcuts** (app-wide, so they work from either window; listed in the **Performance** menu and in the **?** cheat sheet, ⌘/)
-  - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme · **L** lyrics overlay on / off
+  - **1 / 2 / 3 / 4 / 5 / 6** visual mode · **T / ⇧T** next / previous theme · **L** lyrics overlay on / off · **I** image overlays on / off
   - **Space** blackout: fades the preview and output to black over 300 ms while audio keeps running (a **BLACKOUT** badge shows in the HUD)
   - **K** vibe kill: for awkward silences or requests, fades the preview and output over 1 s to a neutral ambient loop — one dim grey orb slowly breathing on black, ignoring the audio. Any mode key (**1 – 6**), a mode pick or a preset recall brings the show back (an **AMBIENT** badge shows in the HUD; click it to exit too)
   - **S** (hold) white strobe over the stage, rate-limited to at most 3 flashes per second (photosensitivity limit), even when tapped quickly
@@ -60,6 +62,7 @@ AuraViz/
 │   ├── PerformanceState.swift         # Shared mode / theme / FPS, blackout, rate-limited strobe, crossfade
 │   ├── PerformanceCommands.swift      # Performance menu shortcuts + cheat-sheet overlay
 │   ├── Presets.swift                  # Preset model, built-ins, JSON store, Presets menu; settings keys
+│   ├── ImageOverlays.swift            # Overlay image model, store (copies, decoding), thumbnail chips + editor
 │   ├── OutputWindow.swift             # Output window view, display placement, Esc, cursor hiding, screenshots
 │   ├── Theme.swift                    # VisualMode, ColorTheme, glass modifiers
 │   ├── AudioEngineManager.swift       # ScreenCaptureKit + AVAudioEngine + vDSP FFT
@@ -72,7 +75,8 @@ AuraViz/
 │   │   ├── TunnelVisualizerView.swift
 │   │   ├── ParticleVisualizerView.swift
 │   │   ├── LaserVisualizerView.swift
-│   │   └── LyricsOverlayView.swift    # Kinetic-type lyrics laid over every mode
+│   │   ├── LyricsOverlayView.swift    # Kinetic-type lyrics laid over every mode
+│   │   └── ImageOverlayView.swift     # Uploaded images laid over every mode, blended and beat-pulsed
 │   ├── Assets.xcassets/AppIcon.appiconset
 │   └── AuraViz.entitlements           # audio-input, no sandbox
 └── build/AuraViz.app                  # pre-built (adhoc signed)

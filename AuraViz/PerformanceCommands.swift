@@ -7,10 +7,11 @@ struct PerformanceCommands: Commands {
     let audio: AudioEngineManager
     let performance: PerformanceState
     let output: OutputWindowController
+    let imageOverlays: ImageOverlayStore
 
     var body: some Commands {
         CommandMenu("Performance") {
-            PerformanceMenu(audio: audio, performance: performance, output: output)
+            PerformanceMenu(audio: audio, performance: performance, output: output, imageOverlays: imageOverlays)
         }
     }
 }
@@ -21,6 +22,7 @@ private struct PerformanceMenu: View {
     let audio: AudioEngineManager
     @ObservedObject var performance: PerformanceState
     let output: OutputWindowController
+    @ObservedObject var imageOverlays: ImageOverlayStore
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -53,6 +55,12 @@ private struct PerformanceMenu: View {
             set: { isOn in ignoringKeyRepeat { withAnimation(.easeInOut(duration: 0.3)) { performance.isLyricsEnabled = isOn } } }
         ))
         .keyboardShortcut("l", modifiers: [])
+        Toggle("Image Overlays", isOn: Binding(
+            get: { imageOverlays.isEnabled },
+            set: { isOn in ignoringKeyRepeat { withAnimation(.easeInOut(duration: 0.3)) { imageOverlays.isEnabled = isOn } } }
+        ))
+        .keyboardShortcut("i", modifiers: [])
+        Button("Add Overlay Image…") { imageOverlays.chooseImages() }
         Divider()
         Toggle("Blackout", isOn: Binding(
             get: { performance.isBlackedOut },
@@ -115,6 +123,7 @@ private let performanceShortcuts: [(keys: String, action: String)] = [
     ("T", "Next theme"),
     ("⇧T", "Previous theme"),
     ("L", "Lyrics overlay on / off"),
+    ("I", "Image overlays on / off"),
     ("Space", "Blackout (audio keeps running)"),
     ("K", "Vibe kill: fade to a calm ambient loop (1 – 6 exits)"),
     ("S hold", "Strobe, at most 3 flashes/s"),

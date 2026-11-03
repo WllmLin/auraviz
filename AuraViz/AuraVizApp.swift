@@ -27,6 +27,7 @@ struct AuraVizApp: App {
     @StateObject private var performance = PerformanceState()
     @StateObject private var output = OutputWindowController()
     @StateObject private var presets = PresetStore()
+    @StateObject private var imageOverlays = ImageOverlayStore()
 
     var body: some Scene {
         WindowGroup {
@@ -35,6 +36,7 @@ struct AuraVizApp: App {
                 .environmentObject(performance)
                 .environmentObject(output)
                 .environmentObject(presets)
+                .environmentObject(imageOverlays)
                 .preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)
@@ -51,7 +53,7 @@ struct AuraVizApp: App {
                     ])
                 }
             }
-            PerformanceCommands(audio: audio, performance: performance, output: output)
+            PerformanceCommands(audio: audio, performance: performance, output: output, imageOverlays: imageOverlays)
             CommandMenu("Presets") {
                 PresetsMenuContent(audio: audio, performance: performance, presets: presets)
             }
@@ -62,6 +64,7 @@ struct AuraVizApp: App {
                 .environmentObject(audio)
                 .environmentObject(performance)
                 .environmentObject(output)
+                .environmentObject(imageOverlays)
                 .preferredColorScheme(.dark)
         }
         .windowStyle(.hiddenTitleBar)

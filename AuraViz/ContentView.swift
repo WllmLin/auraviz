@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject var performance: PerformanceState
     @EnvironmentObject var output: OutputWindowController
     @EnvironmentObject var presets: PresetStore
+    @EnvironmentObject var imageOverlays: ImageOverlayStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var showControls = true
@@ -13,6 +14,7 @@ struct ContentView: View {
     @State private var isFullscreen = false
     @State private var hostWindow = WeakWindow()
     @State private var newPresetName = ""
+    @State private var isDropTargeted = false
     @FocusState private var isLyricsFieldFocused: Bool
 
     var body: some View {
@@ -355,6 +357,26 @@ struct ContentView: View {
             // Clicking the stage finishes editing the lyrics.
             .contentShape(Rectangle())
             .onTapGesture { isLyricsFieldFocused = false }
+            // Image files dropped on the stage become overlay images.
+            .dropDestination(for: URL.self) { urls, _ in
+                let files = urls.filter(\.isFileURL)
+                imageOverlays.add(files)
+                return !files.isEmpty
+            } isTargeted: { isDropTargeted = $0 }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(performance.theme.gradient.first!, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
+                        .overlay(
+                            Label("Drop to add as overlay images", systemImage: "photo.on.rectangle")
+                                .font(.system(size: 12, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 7)
+                                .background(.black.opacity(0.6), in: Capsule())
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
     }
 
     private func presetsMenu(showsTitle: Bool) -> some View {
@@ -664,6 +686,8 @@ struct ContentView: View {
             transitionControl
 
             lyricsControl
+
+            imageOverlayControl
         }
         .padding(16)
         .glassCard()
@@ -788,6 +812,55 @@ struct ContentView: View {
                 .onSubmit { isLyricsFieldFocused = false }
                 .onExitCommand { isLyricsFieldFocused = false }
                 .help("Return or Esc finishes editing. Performance shortcuts are off while you type.")
+        }
+    }
+
+    /// Uploaded images laid over every mode; each chip opens that image's
+    /// settings.
+    private var imageOverlayControl: some View {
+        HStack(spacing: 10) {
+            Toggle(isOn: $imageOverlays.isEnabled.animation(.easeInOut(duration: 0.3))) {
+                Label("Images", systemImage: "photo.on.rectangle").font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help("Show the images over the stage and output (I)")
+            Button {
+                imageOverlays.chooseImages()
+            } label: {
+                Label("Add Image…", systemImage: "plus").font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Add logos, artwork or slides to lay over the visualizers (PNG, JPEG, HEIC…). You can also drop image files on the preview.")
+            if imageOverlays.overlays.isEmpty {
+                Text("Logos, artwork or a sponsor slide. Drop image files on the preview to add them.")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(imageOverlays.overlays) { overlay in
+                            ImageOverlayChip(store: imageOverlays, overlay: overlay)
+                        }
+                    }
+                    .padding(.vertical, 1)
+                }
+            }
+            Spacer(minLength: 0)
+            if let importError = imageOverlays.importError {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(importError)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .help(importError)
+            }
         }
     }
 
@@ -1095,5 +1168,6 @@ private struct SnapshotFeedback: View {
         .environmentObject(PerformanceState())
         .environmentObject(OutputWindowController())
         .environmentObject(PresetStore())
+        .environmentObject(ImageOverlayStore())
         .frame(width: 1000, height: 760)
 }

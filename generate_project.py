@@ -27,6 +27,7 @@ files = [
     ("OutputWindow.swift", "AuraViz/OutputWindow.swift"),
     ("Presets.swift", "AuraViz/Presets.swift"),
     ("FontCatalog.swift", "AuraViz/FontCatalog.swift"),
+    ("ImageOverlays.swift", "AuraViz/ImageOverlays.swift"),
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
     ("Y2KBarVisualizerView.swift", "AuraViz/Visualizers/Y2KBarVisualizerView.swift"),
@@ -34,6 +35,7 @@ files = [
     ("ParticleVisualizerView.swift", "AuraViz/Visualizers/ParticleVisualizerView.swift"),
     ("LaserVisualizerView.swift", "AuraViz/Visualizers/LaserVisualizerView.swift"),
     ("LyricsOverlayView.swift", "AuraViz/Visualizers/LyricsOverlayView.swift"),
+    ("ImageOverlayView.swift", "AuraViz/Visualizers/ImageOverlayView.swift"),
     ("VisualizerStage.swift", "AuraViz/Visualizers/VisualizerStage.swift"),
     ("Assets.xcassets", "AuraViz/Assets.xcassets"),
     ("Fonts", "AuraViz/Resources/Fonts"),
@@ -143,6 +145,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['OutputWindow.swift']} /* OutputWindow.swift */,
 \t\t\t\t{file_refs['Presets.swift']} /* Presets.swift */,
 \t\t\t\t{file_refs['FontCatalog.swift']} /* FontCatalog.swift */,
+\t\t\t\t{file_refs['ImageOverlays.swift']} /* ImageOverlays.swift */,
 \t\t\t\t{visualizers_group_id} /* Visualizers */,
 \t\t\t\t{resources_group_id} /* Resources */,
 \t\t\t\t{file_refs['Assets.xcassets']} /* Assets.xcassets */,
@@ -161,6 +164,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['ParticleVisualizerView.swift']} /* ParticleVisualizerView.swift */,
 \t\t\t\t{file_refs['LaserVisualizerView.swift']} /* LaserVisualizerView.swift */,
 \t\t\t\t{file_refs['LyricsOverlayView.swift']} /* LyricsOverlayView.swift */,
+\t\t\t\t{file_refs['ImageOverlayView.swift']} /* ImageOverlayView.swift */,
 \t\t\t\t{file_refs['VisualizerStage.swift']} /* VisualizerStage.swift */,
 \t\t\t);
 \t\t\tpath = Visualizers;
@@ -253,7 +257,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","ImageOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","ImageOverlays.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;

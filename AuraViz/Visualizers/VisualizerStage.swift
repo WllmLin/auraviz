@@ -13,11 +13,20 @@ struct VisualizerStage: View {
     var lyrics: String? = nil
     /// Display font for the overlay type.
     var lyricsFont: OverlayFont = .systemRounded
+    /// Uploaded images laid over every mode, under the lyrics.
+    var images: [StageImageOverlay] = []
+    var isShowingImages = false
 
     var body: some View {
         ZStack {
             StageOrbs(audio: audio, theme: theme, isActive: audio.isRunning)
             visualizer
+            if !images.isEmpty {
+                // Fades itself (see ImageOverlayLayer); a fading container
+                // would break the blend modes.
+                ImageOverlayLayer(audio: audio, overlays: images, isShown: isShowingImages, isActive: audio.isRunning)
+                    .transition(.identity)
+            }
             if let lyrics {
                 LyricsOverlay(audio: audio, text: lyrics, theme: theme, isActive: audio.isRunning, font: lyricsFont)
                     .transition(.opacity)
@@ -180,6 +189,7 @@ extension ColorTheme {
 struct PerformanceStage: View {
     let audio: AudioEngineManager
     @EnvironmentObject var performance: PerformanceState
+    @EnvironmentObject var imageOverlays: ImageOverlayStore
 
     var body: some View {
         let handoff = performance.handoff
@@ -201,9 +211,9 @@ struct PerformanceStage: View {
         if let look = performance.look(forStageLayer: index) {
             let isIncoming = index == performance.liveStageLayer
             let effect = StageLayerEffect(handoff: handoff, progress: progress, isIncoming: isIncoming)
-            // Both layers show the current lyrics, so a transition only
-            // recolors them.
-            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics, lyricsFont: performance.overlayFont)
+            // Both layers show the current lyrics and images, so a
+            // transition only recolors the lyrics.
+            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics, lyricsFont: performance.overlayFont, images: imageOverlays.stageOverlays, isShowingImages: imageOverlays.isEnabled)
                 .scaleEffect(effect.scale)
                 .visualEffect { content, proxy in
                     content.offset(x: effect.offset * proxy.size.width)
