@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum VisualMode: String, CaseIterable, Identifiable, Codable {
@@ -89,6 +90,29 @@ enum ColorTheme: String, CaseIterable, Identifiable, Codable {
                 Color(white: 0.70)
             ]
         }
+    }
+
+    /// A row of dots, one per `gradient` stop, for the theme menu. Menu items only
+    /// render text and images, so the dots are drawn into a non-template image.
+    var swatchImage: NSImage {
+        let colors = gradient.map { NSColor($0) }
+        let dot: CGFloat = 8, gap: CGFloat = 3
+        let size = NSSize(width: CGFloat(colors.count) * dot + CGFloat(colors.count - 1) * gap, height: dot)
+        let image = NSImage(size: size, flipped: false) { _ in
+            for (i, color) in colors.enumerated() {
+                let rect = NSRect(x: CGFloat(i) * (dot + gap), y: 0, width: dot, height: dot)
+                let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+                color.setFill()
+                circle.fill()
+                // Hairline so dark stops (Chrome's black) stay visible on a dark menu.
+                NSColor.white.withAlphaComponent(0.35).setStroke()
+                circle.lineWidth = 0.5
+                circle.stroke()
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 
     var barGradient: LinearGradient {

@@ -263,7 +263,9 @@ struct ContentView: View {
     private func themeMenu(showsName: Bool) -> some View {
         Menu {
             ForEach(ColorTheme.allCases) { th in
-                Button(th.rawValue) { performance.theme = th }
+                Button { performance.theme = th } label: {
+                    Label { Text(th.rawValue) } icon: { Image(nsImage: th.swatchImage) }
+                }
             }
         } label: {
             HStack(spacing: 6) {
