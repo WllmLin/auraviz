@@ -204,15 +204,12 @@ struct ContentView: View {
 
     private func brand(_ density: HeaderDensity) -> some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(LinearGradient(colors: performance.theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 36, height: 36)
-                    .shadow(color: performance.theme.gradient.first!.opacity(0.5), radius: 10, x: 0, y: 4)
-                Image(systemName: "waveform.path.badge.mic")
-                    .foregroundStyle(.white)
-                    .font(.system(size: 16, weight: .semibold))
-            }
+            BrandMark(
+                gradient: performance.theme.gradient,
+                kick: audio.kick,
+                beatReactivity: audio.beatReactivity,
+                isActive: audio.isRunning
+            )
             if density < .compact {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("AURA_VIZ")
@@ -1105,6 +1102,55 @@ private struct BeatFlashDot: View {
                 .shadow(color: color.opacity(flash), radius: 6 * flash)
         }
         .frame(width: 12, height: 12)
+    }
+}
+
+/// The header's gradient tile, swelling and glowing on each kick so the
+/// control window feels the music like the stage does. The pulse is the
+/// kick voice's hit pulse scaled by the master beat reactivity (not the
+/// per-mode drum reactivity: this is chrome, not a visualizer), and it
+/// rests at its plain size and glow while audio is stopped, at zero beat
+/// reactivity, or under Reduce Motion. Like the beat dot it follows every
+/// kick: at 36 pt it is a small indicator, not a large-area flash, so the
+/// strobe cap doesn't apply. Scaling is by transform, so the header's
+/// layout never shifts.
+private struct BrandMark: View {
+    var gradient: [Color]
+    var kick: DrumHits
+    var beatReactivity: Double
+    var isActive: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Scale added by a full-strength kick at full beat reactivity.
+    private static let maximumScaleBoost = 0.12
+    /// Shadow radius at rest and how much a full-strength kick adds.
+    private static let restGlowRadius = 10.0
+    private static let maximumGlowBoost = 14.0
+    /// Shadow opacity at rest and how much a full-strength kick adds.
+    private static let restGlowOpacity = 0.5
+    private static let maximumGlowOpacityBoost = 0.4
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive || beatReactivity <= 0 || reduceMotion)) { timeline in
+            let energy = (isActive && !reduceMotion)
+                ? min(1, max(0, beatReactivity * kick.pulse(at: BeatClock.time(for: timeline.date))))
+                : 0
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 36, height: 36)
+                    .shadow(
+                        color: (gradient.first ?? .white).opacity(Self.restGlowOpacity + Self.maximumGlowOpacityBoost * energy),
+                        radius: CGFloat(Self.restGlowRadius + Self.maximumGlowBoost * energy),
+                        x: 0, y: 4
+                    )
+                Image(systemName: "waveform.path.badge.mic")
+                    .foregroundStyle(.white)
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .scaleEffect(CGFloat(1 + Self.maximumScaleBoost * energy))
+        }
+        .frame(width: 36, height: 36)
     }
 }
 
