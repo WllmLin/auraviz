@@ -94,19 +94,34 @@ enum ColorTheme: String, CaseIterable, Identifiable, Codable {
 
     /// A row of dots, one per `gradient` stop, for the theme menu. Menu items only
     /// render text and images, so the dots are drawn into a non-template image.
-    var swatchImage: NSImage {
+    /// Gradients are constants, so each swatch is built once and cached instead
+    /// of recreated every time SwiftUI rebuilds the menu items.
+    var swatchImage: NSImage { Self.swatchCache[self]! }
+
+    private static let swatchCache: [ColorTheme: NSImage] =
+        Dictionary(uniqueKeysWithValues: allCases.map { ($0, $0.makeSwatchImage()) })
+
+    private func makeSwatchImage() -> NSImage {
         let colors = gradient.map { NSColor($0) }
-        let dot: CGFloat = 8, gap: CGFloat = 3
+        // 10pt reads against the menu's 13pt text at a glance, muted stops included.
+        let dot: CGFloat = 10, gap: CGFloat = 3
         let size = NSSize(width: CGFloat(colors.count) * dot + CGFloat(colors.count - 1) * gap, height: dot)
-        let image = NSImage(size: size, flipped: false) { _ in
+        let image = NSImage(size: size, flipped: false) { rect in
+            // Lay out from the rect AppKit hands the handler (its contract), so
+            // the dots stay round and inside the image at any backing scale.
+            let diameter = rect.height
+            let spacing = colors.count > 1 ? (rect.width - CGFloat(colors.count) * diameter) / CGFloat(colors.count - 1) : 0
             for (i, color) in colors.enumerated() {
-                let rect = NSRect(x: CGFloat(i) * (dot + gap), y: 0, width: dot, height: dot)
-                let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+                let dotRect = NSRect(x: rect.minX + CGFloat(i) * (diameter + spacing),
+                                     y: rect.minY, width: diameter, height: diameter)
+                let circle = NSBezierPath(ovalIn: dotRect.insetBy(dx: 0.5, dy: 0.5))
                 color.setFill()
                 circle.fill()
-                // Hairline so dark stops (Chrome's black) stay visible on a dark menu.
-                NSColor.white.withAlphaComponent(0.35).setStroke()
-                circle.lineWidth = 0.5
+                // Ring so dark stops (Chrome's black, Tokyo Night's navy) stay
+                // visible on the dark menu: 1pt at 55% white, kept inside the
+                // dot by the 0.5pt inset above. At 35%/0.5pt it washed out.
+                NSColor.white.withAlphaComponent(0.55).setStroke()
+                circle.lineWidth = 1
                 circle.stroke()
             }
             return true
