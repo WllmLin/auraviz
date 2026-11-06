@@ -33,6 +33,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.
+  - **Quit guard** — while the output window is open or audio capture is on, Quit (⌘Q, the app menu or the Dock) asks first. Return and Esc cancel, so the show keeps running; press ⌘Q again or click **Quit** to confirm. Closing the last window still quits without asking.
   - Mode, theme, Circle FPS, input, capture source, Auto Gain, Sensitivity, Smoothing, Beat reactivity, every mode's drum reactivity, the lyrics text and overlay toggle, and the overlay images with their settings and toggle are remembered across launches.
 
 - **Presets** (header **Presets** button and the **Presets** menu)
