@@ -18,6 +18,8 @@ final class PerformanceState: ObservableObject {
     /// A switch asked for this soon after a beat or bar lands on that one
     /// instead of waiting a whole beat or bar for the next.
     static let quantizeLateTolerance: TimeInterval = 0.06
+    /// The output dimmer's travel. Never down to black; that's the blackout.
+    static let outputBrightnessRange = 0.2...1.0
 
     /// Set directly, these cut. Mode switches and preset recalls go through
     /// `show(_:clock:)` to use the chosen transition and quantize.
@@ -54,6 +56,11 @@ final class PerformanceState: ObservableObject {
     /// Covers the stage with a dim, neutral ambient loop for awkward silences
     /// and requests; audio keeps running. Any look change brings the show back.
     @Published var isVibeKilled = false
+    /// Dims the whole stage, preview and output, for a projector or screen
+    /// that's too bright. 1 is full brightness.
+    @Published var outputBrightness = 1.0 {
+        didSet { UserDefaults.standard.set(outputBrightness, forKey: SettingsKey.outputBrightness) }
+    }
     /// `BeatClock.now` of the most recent strobe flash.
     @Published private(set) var strobeFlashTime: TimeInterval = -.infinity
     @Published var isShowingShortcuts = false
@@ -147,6 +154,7 @@ final class PerformanceState: ObservableObject {
         if let overlayFont = defaults.string(forKey: SettingsKey.overlayFont).flatMap(OverlayFont.init(rawValue:)) {
             self.overlayFont = overlayFont
         }
+        outputBrightness = defaults.double(forKey: SettingsKey.outputBrightness, in: Self.outputBrightnessRange) ?? outputBrightness
     }
 
     func cycleTheme(by offset: Int) {

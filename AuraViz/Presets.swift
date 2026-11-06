@@ -21,6 +21,7 @@ enum SettingsKey {
     static let overlayFont = "overlayFont"
     static let imageOverlays = "imageOverlays"
     static let imageOverlaysEnabled = "imageOverlaysEnabled"
+    static let outputBrightness = "outputBrightness"
 }
 
 extension UserDefaults {

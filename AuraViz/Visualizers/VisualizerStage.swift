@@ -348,8 +348,9 @@ private struct WipeEdge: View {
     }
 }
 
-/// Vibe kill, strobe flashes and blackout from the shared performance state,
-/// laid over a stage so the preview and the output show the same thing.
+/// Vibe kill, strobe flashes, the output dimmer and blackout from the shared
+/// performance state, laid over a stage so the preview and the output show
+/// the same thing.
 struct StageEffectsOverlay: View {
     @EnvironmentObject var performance: PerformanceState
 
@@ -367,6 +368,9 @@ struct StageEffectsOverlay: View {
                     LinearKeyframe(1.0, duration: 0.05)
                     LinearKeyframe(0.0, duration: 0.07)
                 }
+            // Above the strobe so the flashes dim too.
+            Color.black
+                .opacity(1 - performance.outputBrightness)
             // Above the strobe so a blackout always wins.
             Color.black
                 .opacity(performance.isBlackedOut ? 1 : 0)

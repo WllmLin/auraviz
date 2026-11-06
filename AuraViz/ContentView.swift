@@ -684,6 +684,8 @@ struct ContentView: View {
 
             transitionControl
 
+            outputDimmerControl
+
             lyricsControl
 
             imageOverlayControl
@@ -792,6 +794,27 @@ struct ContentView: View {
             .labelsHidden()
             .fixedSize()
             .help("Wait for the next beat or bar to switch. Needs a tempo: detected, or tapped with B. Without one, switches happen at once.")
+        }
+    }
+
+    /// Dims the preview and output together, for a projector or screen that's
+    /// too bright.
+    private var outputDimmerControl: some View {
+        HStack(spacing: 10) {
+            Label("Output Brightness", systemImage: "sun.max.fill")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            Slider(value: $performance.outputBrightness, in: PerformanceState.outputBrightnessRange)
+                .tint(.yellow)
+                .frame(maxWidth: 260)
+                .help("Dims the output and preview, from 100% down to 20%, if the projector or screen is too bright")
+                .accessibilityLabel("Output brightness")
+                .accessibilityValue(String(format: "%.0f percent", performance.outputBrightness * 100))
+            Text(String(format: "%.0f%%", performance.outputBrightness * 100))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(width: 36, alignment: .trailing)
+            Spacer()
         }
     }
 
