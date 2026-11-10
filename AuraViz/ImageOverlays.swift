@@ -9,6 +9,9 @@ struct ImageOverlay: Identifiable, Codable, Equatable {
     static let sizeRange: ClosedRange<Double> = 0.05...1
     static let opacityRange: ClosedRange<Double> = 0...1
     static let pulseRange: ClosedRange<Double> = 0...1
+    static let defaultSize = 0.35
+    static let defaultOpacity = 1.0
+    static let defaultPulse = 0.5
     /// Gap between a corner image and the stage edge, as a fraction of the
     /// stage's shorter side.
     static let cornerMargin: CGFloat = 0.04
@@ -22,11 +25,11 @@ struct ImageOverlay: Identifiable, Codable, Equatable {
     var placement: ImageOverlayPlacement = .center
     /// How much of the stage (inside the margins) the image may fill on each
     /// axis, keeping its aspect ratio. Ignored by `.fill`.
-    var size = 0.35
-    var opacity = 1.0
+    var size = ImageOverlay.defaultSize
+    var opacity = ImageOverlay.defaultOpacity
     var blend: ImageOverlayBlend = .normal
     /// How far the image punches up on each beat, scaled by beat reactivity.
-    var pulse = 0.5
+    var pulse = ImageOverlay.defaultPulse
 }
 
 /// Where an overlay image sits on the stage.
@@ -394,10 +397,10 @@ private struct ImageOverlayEditor: View {
                 }
             }
             .font(.system(size: 11, weight: .semibold, design: .rounded))
-            slider("Size", value: $overlay.size, in: ImageOverlay.sizeRange, tint: .orange)
+            slider("Size", value: $overlay.size, in: ImageOverlay.sizeRange, default: ImageOverlay.defaultSize, tint: .orange)
                 .disabled(!overlay.placement.isSized)
                 .help(overlay.placement.isSized ? "How much of the stage the image may fill" : "Fill Stage always covers the whole stage")
-            slider("Opacity", value: $overlay.opacity, in: ImageOverlay.opacityRange, tint: .purple)
+            slider("Opacity", value: $overlay.opacity, in: ImageOverlay.opacityRange, default: ImageOverlay.defaultOpacity, tint: .purple)
             VStack(alignment: .leading, spacing: 5) {
                 Text("Blend").font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
                 Picker("Blend", selection: $overlay.blend) {
@@ -409,7 +412,7 @@ private struct ImageOverlayEditor: View {
                 .labelsHidden()
                 .help(overlay.blend.help)
             }
-            slider("Beat pulse", value: $overlay.pulse, in: ImageOverlay.pulseRange, tint: .pink)
+            slider("Beat pulse", value: $overlay.pulse, in: ImageOverlay.pulseRange, default: ImageOverlay.defaultPulse, tint: .pink)
                 .help("How far the image punches up on each beat; scaled by beat reactivity, 0 holds it still")
             Divider()
             Button("Remove Image", role: .destructive, action: onRemove)
@@ -419,7 +422,7 @@ private struct ImageOverlayEditor: View {
         .frame(width: 260)
     }
 
-    private func slider(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, tint: Color) -> some View {
+    private func slider(_ title: String, value: Binding<Double>, in range: ClosedRange<Double>, default defaultValue: Double, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(title).font(.system(size: 11, weight: .bold, design: .rounded)).foregroundStyle(.white.opacity(0.85))
@@ -428,7 +431,7 @@ private struct ImageOverlayEditor: View {
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.6))
             }
-            Slider(value: value, in: range)
+            ControlSlider(value: value, in: range, default: defaultValue) { String(format: "%.0f%%", $0 * 100) }
                 .tint(tint)
                 .accessibilityLabel(title)
         }

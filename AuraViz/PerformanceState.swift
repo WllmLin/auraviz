@@ -20,6 +20,7 @@ final class PerformanceState: ObservableObject {
     static let quantizeLateTolerance: TimeInterval = 0.06
     /// The output dimmer's travel. Never down to black; that's the blackout.
     static let outputBrightnessRange = 0.2...1.0
+    static let defaultOutputBrightness = 1.0
 
     /// Set directly, these cut. Mode switches and preset recalls go through
     /// `show(_:clock:)` to use the chosen transition and quantize.
@@ -58,7 +59,7 @@ final class PerformanceState: ObservableObject {
     @Published var isVibeKilled = false
     /// Dims the whole stage, preview and output, for a projector or screen
     /// that's too bright. 1 is full brightness.
-    @Published var outputBrightness = 1.0 {
+    @Published var outputBrightness = PerformanceState.defaultOutputBrightness {
         didSet { UserDefaults.standard.set(outputBrightness, forKey: SettingsKey.outputBrightness) }
     }
     /// `BeatClock.now` of the most recent strobe flash.

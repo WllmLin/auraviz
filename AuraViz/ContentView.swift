@@ -804,7 +804,8 @@ struct ContentView: View {
             Label("Output Brightness", systemImage: "sun.max.fill")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.85))
-            Slider(value: $performance.outputBrightness, in: PerformanceState.outputBrightnessRange)
+            ControlSlider(value: $performance.outputBrightness, in: PerformanceState.outputBrightnessRange,
+                          default: PerformanceState.defaultOutputBrightness, format: Self.percent)
                 .tint(.yellow)
                 .frame(maxWidth: 260)
                 .help("Dims the output and preview, from 100% down to 20%, if the projector or screen is too bright")
@@ -930,7 +931,8 @@ struct ContentView: View {
                 Spacer()
                 Text(String(format: "%.1fx", audio.sensitivity)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
             }
-            Slider(value: $audio.sensitivity, in: AudioEngineManager.sensitivityRange)
+            ControlSlider(value: $audio.sensitivity, in: AudioEngineManager.sensitivityRange,
+                          default: AudioEngineManager.defaultSensitivity) { String(format: "%.1fx", $0) }
                 .tint(.orange)
                 .help(audio.autoGainEnabled ? "Trim on top of auto gain; 1.0x is neutral" : "Input sensitivity")
         }
@@ -943,7 +945,8 @@ struct ContentView: View {
                 Spacer()
                 Text(String(format: "%.0f%%", audio.smoothing*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
             }
-            Slider(value: $audio.smoothing, in: AudioEngineManager.smoothingRange)
+            ControlSlider(value: $audio.smoothing, in: AudioEngineManager.smoothingRange,
+                          default: AudioEngineManager.defaultSmoothing, format: Self.percent)
                 .tint(.purple)
         }
     }
@@ -955,7 +958,8 @@ struct ContentView: View {
                 Spacer()
                 Text(String(format: "%.0f%%", audio.beatReactivity*100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
             }
-            Slider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange)
+            ControlSlider(value: $audio.beatReactivity, in: AudioEngineManager.beatReactivityRange,
+                          default: AudioEngineManager.defaultBeatReactivity, format: Self.percent)
                 .tint(.pink)
                 .help("Scales beat-synced motion, punches and flashes; 0 reacts to volume only")
         }
@@ -982,11 +986,17 @@ struct ContentView: View {
                 Spacer()
                 Text(String(format: "%.0f%%", value.wrappedValue * 100)).font(.system(size: 11, weight: .semibold, design: .monospaced)).foregroundStyle(.white.opacity(0.6))
             }
-            Slider(value: value, in: DrumReactivity.range)
+            ControlSlider(value: value, in: DrumReactivity.range,
+                          default: mode.defaultDrumReactivity[instrument], format: Self.percent)
                 .tint(tint)
                 .help("How strongly \(mode.rawValue) reacts to the \(instrument.rawValue.lowercased())'s \(instrument.character); scaled by beat reactivity")
                 .accessibilityLabel("\(instrument.rawValue) reactivity for \(mode.rawValue)")
         }
+    }
+
+    /// Slider bubble text for 0–1 amounts.
+    private static func percent(_ value: Double) -> String {
+        String(format: "%.0f%%", value * 100)
     }
 
     private static func drumTint(_ instrument: DrumInstrument) -> Color {

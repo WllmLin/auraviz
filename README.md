@@ -30,6 +30,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
 - **Controls**
   - Auto Gain (on by default; **AGC** badge in the HUD) + Sensitivity (0.3–2.2×, a trim on top of Auto Gain while it is on) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
   - **Kick / Snare / Hat** reactivity (0–100% each) for the current visualizer, set separately for every mode and scaled by Beat reactivity; a dot beside each flashes on every detected hit
+  - Every slider shows its value in a bubble over the knob while you hover or drag it; double-click a slider to reset it to its default
   - Theme: Aurora / Sunset / Ocean / Y2K Chrome / Stockholm / Tokyo Night / Cyberpunk / Chrome
   - Segmented mode switch, live volume & Hz HUD, play/pause
   - **Open Output** — opens the separate "AuraViz Output" window (visualizer only, on black) in native full screen on the display picked from its arrow menu; Esc in the output leaves full screen and the cursor hides over it after 2 s idle. Mode, theme and Circle FPS stay in sync with the control window's preview.

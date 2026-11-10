@@ -155,6 +155,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     static let sensitivityRange: ClosedRange<Double> = 0.3...2.2
     static let smoothingRange: ClosedRange<Double> = 0...0.92
     static let beatReactivityRange: ClosedRange<Double> = 0...1
+    static let defaultSensitivity = 1.0
+    static let defaultSmoothing = 0.75
+    static let defaultBeatReactivity = 0.6
 
     @Published var inputMode: InputMode = .systemAudio {
         didSet {
@@ -184,7 +187,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
     /// system audio, including when `captureApp` isn't running.
     @Published private(set) var capturedAppName: String?
 
-    @Published var sensitivity: Double = 1.0 {
+    @Published var sensitivity: Double = AudioEngineManager.defaultSensitivity {
         didSet { UserDefaults.standard.set(sensitivity, forKey: SettingsKey.sensitivity) }
     }
     /// Normalizes volume and spectrum against the recent source level. While
@@ -192,11 +195,11 @@ final class AudioEngineManager: NSObject, ObservableObject {
     @Published var autoGainEnabled = true {
         didSet { UserDefaults.standard.set(autoGainEnabled, forKey: SettingsKey.autoGainEnabled) }
     }
-    @Published var smoothing: Double = 0.75 {
+    @Published var smoothing: Double = AudioEngineManager.defaultSmoothing {
         didSet { UserDefaults.standard.set(smoothing, forKey: SettingsKey.smoothing) }
     }
     /// Scales every beat-synced visual effect; 0 = volume-only visuals.
-    @Published var beatReactivity: Double = 0.6 {
+    @Published var beatReactivity: Double = AudioEngineManager.defaultBeatReactivity {
         didSet { UserDefaults.standard.set(beatReactivity, forKey: SettingsKey.beatReactivity) }
     }
     /// Per-visualizer drum reactivity, keyed by `VisualMode.rawValue`. Modes
@@ -459,9 +462,9 @@ final class AudioEngineManager: NSObject, ObservableObject {
     }
 
     func resetVisualizationControls() {
-        sensitivity = 1.0
-        smoothing = 0.75
-        beatReactivity = 0.6
+        sensitivity = Self.defaultSensitivity
+        smoothing = Self.defaultSmoothing
+        beatReactivity = Self.defaultBeatReactivity
         drumReactivityByMode = [:]
     }
 

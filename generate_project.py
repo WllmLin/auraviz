@@ -28,6 +28,7 @@ files = [
     ("Presets.swift", "AuraViz/Presets.swift"),
     ("FontCatalog.swift", "AuraViz/FontCatalog.swift"),
     ("ImageOverlays.swift", "AuraViz/ImageOverlays.swift"),
+    ("ControlSlider.swift", "AuraViz/ControlSlider.swift"),
     ("CircularVisualizerView.swift", "AuraViz/Visualizers/CircularVisualizerView.swift"),
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
     ("Y2KBarVisualizerView.swift", "AuraViz/Visualizers/Y2KBarVisualizerView.swift"),
@@ -146,6 +147,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['Presets.swift']} /* Presets.swift */,
 \t\t\t\t{file_refs['FontCatalog.swift']} /* FontCatalog.swift */,
 \t\t\t\t{file_refs['ImageOverlays.swift']} /* ImageOverlays.swift */,
+\t\t\t\t{file_refs['ControlSlider.swift']} /* ControlSlider.swift */,
 \t\t\t\t{visualizers_group_id} /* Visualizers */,
 \t\t\t\t{resources_group_id} /* Resources */,
 \t\t\t\t{file_refs['Assets.xcassets']} /* Assets.xcassets */,
@@ -257,7 +259,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","ImageOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","ImageOverlays.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","LaserVisualizerView.swift","LyricsOverlayView.swift","ImageOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","ImageOverlays.swift","ControlSlider.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;

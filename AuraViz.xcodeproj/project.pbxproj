@@ -26,6 +26,7 @@
 		435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B390514A7E1CE3EB9A2B07B /* VisualizerStage.swift */; };
 		992D028D843E6D0BC8E7163C /* FontCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E7CA85AB3D1E0CB3905F82 /* FontCatalog.swift */; };
 		7F0C6908F398B78252B0674D /* ImageOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6570C321DC9A7FEA54CF95C /* ImageOverlays.swift */; };
+		FE3234AF017FEC4B59988A42 /* ControlSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B5AB0B88DB9D6CC274728D0 /* ControlSlider.swift */; };
 		F62DC726FB25D1F7EC81947E /* ImageOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2DECE75B72D55034644C4E2 /* ImageOverlayView.swift */; };
 		6AF183D1D6F34383E4EE4035 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1D18080090E4D43AE61FED35 /* Assets.xcassets */; };
 		69252062B88409AC62ECB172 /* Fonts in Resources */ = {isa = PBXBuildFile; fileRef = 3C8A3E933408D286FA9073B6 /* Fonts */; };
@@ -53,6 +54,7 @@
 		1EF1CD0DA44C294D3D3884AD /* AuraViz.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AuraViz.entitlements; sourceTree = "<group>"; };
 		13E7CA85AB3D1E0CB3905F82 /* FontCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontCatalog.swift; sourceTree = "<group>"; };
 		E6570C321DC9A7FEA54CF95C /* ImageOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageOverlays.swift; sourceTree = "<group>"; };
+		7B5AB0B88DB9D6CC274728D0 /* ControlSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlSlider.swift; sourceTree = "<group>"; };
 		B2DECE75B72D55034644C4E2 /* ImageOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageOverlayView.swift; sourceTree = "<group>"; };
 		3C8A3E933408D286FA9073B6 /* Fonts */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Fonts; sourceTree = "<group>"; };
 		A311C1A6766E7D76D033ABD6 /* AuraViz.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AuraViz.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -99,6 +101,7 @@
 				BEBCFCF3D8FFDD21C9959C7D /* Presets.swift */,
 				13E7CA85AB3D1E0CB3905F82 /* FontCatalog.swift */,
 				E6570C321DC9A7FEA54CF95C /* ImageOverlays.swift */,
+				7B5AB0B88DB9D6CC274728D0 /* ControlSlider.swift */,
 				1997AF537277371E7A961FB5 /* Visualizers */,
 				6E8788ECF80EE7A87D086084 /* Resources */,
 				1D18080090E4D43AE61FED35 /* Assets.xcassets */,
@@ -219,6 +222,7 @@
 				6EB7DD22C614F9FCFC01723D /* Presets.swift in Sources */,
 				992D028D843E6D0BC8E7163C /* FontCatalog.swift in Sources */,
 				7F0C6908F398B78252B0674D /* ImageOverlays.swift in Sources */,
+				FE3234AF017FEC4B59988A42 /* ControlSlider.swift in Sources */,
 				F62DC726FB25D1F7EC81947E /* ImageOverlayView.swift in Sources */,
 				435BD13DB2481EBA036560AA /* VisualizerStage.swift in Sources */,
 			);
