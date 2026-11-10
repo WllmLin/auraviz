@@ -47,7 +47,7 @@ struct LaserVisualizerView: View {
     ]
 
     var body: some View {
-        let palette = LaserPalette(theme: theme)
+        let palette = ThemePalette(theme: theme)
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             let now = BeatClock.time(for: timeline.date)
@@ -82,7 +82,7 @@ struct LaserVisualizerView: View {
         .background(Color.clear)
     }
 
-    private func draw(in context: GraphicsContext, size: CGSize, phase: Double, energy: Double, level: Double, kick: Double, drums: LaserDrumAccents, palette: LaserPalette) {
+    private func draw(in context: GraphicsContext, size: CGSize, phase: Double, energy: Double, level: Double, kick: Double, drums: LaserDrumAccents, palette: ThemePalette) {
         let w = size.width
         let h = size.height
         let s = size.visualizerScale
@@ -189,8 +189,8 @@ private final class LaserLight {
 }
 
 /// The theme's gradient as RGB for interpolation, skipping near-black stops
-/// that would vanish on the dark stage.
-private struct LaserPalette {
+/// that would vanish on the dark stage. Shared by the Laser and Particles modes.
+struct ThemePalette {
     struct RGB {
         var r: Double
         var g: Double
