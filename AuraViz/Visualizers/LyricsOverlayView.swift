@@ -7,7 +7,7 @@ import SwiftUI
 /// text (once per bar at full beat reactivity), and every kick ripples out
 /// from the middle, punching the characters up to black weight. Colored along
 /// the theme's gradient. Kick punches keep to the 3-per-second strobe cap,
-/// like the lasers.
+/// like the kaleidoscope.
 ///
 /// Takes the manager unobserved and reads it per tick, so audio frames don't
 /// redraw the text faster than its own timeline.

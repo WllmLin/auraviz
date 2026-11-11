@@ -119,7 +119,7 @@ private struct PerformanceMenu: View {
 
 /// The cheat sheet's rows, in menu order.
 private let performanceShortcuts: [(keys: String, action: String)] = [
-    ("1 – 6", "Circle / Waves / Bars / Tunnel / Particles / Laser"),
+    ("1 – 6", "Circle / Waves / Bars / Tunnel / Particles / Kaleidoscope"),
     ("T", "Next theme"),
     ("⇧T", "Previous theme"),
     ("L", "Lyrics overlay on / off"),

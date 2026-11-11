@@ -7,7 +7,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     case y2k = "Bars"
     case tunnel = "Tunnel"
     case particles = "Particles"
-    case laser = "Laser"
+    case kaleidoscope = "Kaleidoscope"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -16,7 +16,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
         case .y2k: return "chart.bar.fill"
         case .tunnel: return "hexagon"
         case .particles: return "sparkles"
-        case .laser: return "laser.burst"
+        case .kaleidoscope: return "flower"
         }
     }
 
@@ -26,8 +26,8 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     /// kicks, gloss on snares and glint their caps on hats; Tunnel breathes on
     /// kicks, lights its rails on snares and sparks its corners on hats;
     /// Particles swell the core on kicks, fire a ring on snares and twinkle on
-    /// hats; Laser punches its apertures on kicks, opens its fans on snares
-    /// and shimmers its beams on hats.
+    /// hats; Kaleidoscope pumps its mandala on kicks, flips its mirror on
+    /// snares and glints its wedge tips on hats.
     var defaultDrumReactivity: DrumReactivity {
         switch self {
         case .circle: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
@@ -35,7 +35,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
         case .y2k: return DrumReactivity(kick: 0.7, snare: 0.7, hat: 0.8)
         case .tunnel: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
         case .particles: return DrumReactivity(kick: 0.8, snare: 0.9, hat: 1)
-        case .laser: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
+        case .kaleidoscope: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
         }
     }
 }

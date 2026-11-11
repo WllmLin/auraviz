@@ -77,7 +77,8 @@ extension Preset {
         let fallback = Preset(name: "")
         id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
         name = try container.decode(String.self, forKey: .name)
-        mode = (try? container.decode(VisualMode.self, forKey: .mode)) ?? fallback.mode
+        // "Laser" is the Kaleidoscope mode's pre-rename stored value.
+        mode = (try? container.decode(String.self, forKey: .mode)).flatMap { VisualMode(rawValue: $0) ?? ($0 == "Laser" ? .kaleidoscope : nil) } ?? fallback.mode
         theme = (try? container.decode(ColorTheme.self, forKey: .theme)) ?? fallback.theme
         circleFramesPerSecond = (try? container.decode(Int.self, forKey: .circleFramesPerSecond)) ?? fallback.circleFramesPerSecond
         sensitivity = (try? container.decode(Double.self, forKey: .sensitivity)) ?? fallback.sensitivity

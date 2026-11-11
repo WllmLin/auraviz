@@ -134,7 +134,8 @@ final class PerformanceState: ObservableObject {
 
     private func restoreSettings() {
         let defaults = UserDefaults.standard
-        if let mode = defaults.string(forKey: SettingsKey.mode).flatMap(VisualMode.init(rawValue:)) {
+        // "Laser" is the Kaleidoscope mode's pre-rename stored value.
+        if let mode = defaults.string(forKey: SettingsKey.mode).flatMap({ VisualMode(rawValue: $0) ?? ($0 == "Laser" ? .kaleidoscope : nil) }) {
             self.mode = mode
         }
         if let theme = defaults.string(forKey: SettingsKey.theme).flatMap(ColorTheme.init(rawValue:)) {
