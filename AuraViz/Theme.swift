@@ -34,8 +34,8 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     /// What each mode does with the drums, tuned so its signature effect
     /// leads: Circle kicks a shockwave, snares flare the rim and hats twinkle
     /// the LED ring; Waves lifts its low, mid and high layers; Bars bounce on
-    /// kicks, gloss on snares and glint their caps on hats; Tunnel breathes on
-    /// kicks, lights its rails on snares and sparks its corners on hats; Neon
+    /// kicks, gloss on snares and glint their caps on hats; Tunnel punches its
+    /// cage on kicks, lights its rails on snares and sparks its corners on hats; Neon
     /// punches its frames on kicks, jolts its roll on snares and glints its
     /// bar ends on hats; Kaleidoscope pumps its mandala on kicks, flips its
     /// mirror on snares and glints its wedge tips on hats.
