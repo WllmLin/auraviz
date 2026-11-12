@@ -6,16 +6,27 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     case waves = "Waves"
     case y2k = "Bars"
     case tunnel = "Tunnel"
-    case particles = "Particles"
+    case neon = "Neon"
     case kaleidoscope = "Kaleidoscope"
     var id: String { rawValue }
+
+    /// A mode from its stored raw value, mapping retired modes to their
+    /// replacements: "Laser" became Kaleidoscope and "Particles" became Neon.
+    init?(storedValue: String) {
+        switch storedValue {
+        case "Laser": self = .kaleidoscope
+        case "Particles": self = .neon
+        default: self.init(rawValue: storedValue)
+        }
+    }
+
     var icon: String {
         switch self {
         case .circle: return "circle.dashed"
         case .waves: return "waveform.path.ecg"
         case .y2k: return "chart.bar.fill"
         case .tunnel: return "hexagon"
-        case .particles: return "sparkles"
+        case .neon: return "cube.transparent"
         case .kaleidoscope: return "flower"
         }
     }
@@ -24,17 +35,17 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
     /// leads: Circle kicks a shockwave, snares flare the rim and hats twinkle
     /// the LED ring; Waves lifts its low, mid and high layers; Bars bounce on
     /// kicks, gloss on snares and glint their caps on hats; Tunnel breathes on
-    /// kicks, lights its rails on snares and sparks its corners on hats;
-    /// Particles swell the core on kicks, fire a ring on snares and twinkle on
-    /// hats; Kaleidoscope pumps its mandala on kicks, flips its mirror on
-    /// snares and glints its wedge tips on hats.
+    /// kicks, lights its rails on snares and sparks its corners on hats; Neon
+    /// punches its frames on kicks, jolts its roll on snares and glints its
+    /// bar ends on hats; Kaleidoscope pumps its mandala on kicks, flips its
+    /// mirror on snares and glints its wedge tips on hats.
     var defaultDrumReactivity: DrumReactivity {
         switch self {
         case .circle: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
         case .waves: return DrumReactivity(kick: 0.8, snare: 0.6, hat: 0.8)
         case .y2k: return DrumReactivity(kick: 0.7, snare: 0.7, hat: 0.8)
         case .tunnel: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
-        case .particles: return DrumReactivity(kick: 0.8, snare: 0.9, hat: 1)
+        case .neon: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.8)
         case .kaleidoscope: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
         }
     }

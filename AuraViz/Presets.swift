@@ -77,8 +77,7 @@ extension Preset {
         let fallback = Preset(name: "")
         id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
         name = try container.decode(String.self, forKey: .name)
-        // "Laser" is the Kaleidoscope mode's pre-rename stored value.
-        mode = (try? container.decode(String.self, forKey: .mode)).flatMap { VisualMode(rawValue: $0) ?? ($0 == "Laser" ? .kaleidoscope : nil) } ?? fallback.mode
+        mode = (try? container.decode(String.self, forKey: .mode)).flatMap(VisualMode.init(storedValue:)) ?? fallback.mode
         theme = (try? container.decode(ColorTheme.self, forKey: .theme)) ?? fallback.theme
         circleFramesPerSecond = (try? container.decode(Int.self, forKey: .circleFramesPerSecond)) ?? fallback.circleFramesPerSecond
         sensitivity = (try? container.decode(Double.self, forKey: .sensitivity)) ?? fallback.sensitivity
@@ -151,9 +150,9 @@ final class PresetStore: ObservableObject {
         ),
         Preset(
             id: UUID(uuidString: "6A1F3C52-0B7E-4C1D-9A55-1C0FFEE00005")!,
-            name: "Fireworks",
-            mode: .particles,
-            theme: .sunset,
+            name: "Neon Cage",
+            mode: .neon,
+            theme: .cyberpunk,
             circleFramesPerSecond: 60,
             sensitivity: 1.0,
             smoothing: 0.5,

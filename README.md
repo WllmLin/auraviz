@@ -11,7 +11,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - **Waves** — three layered filled sine waves driven by low/mid/high bands + live waveform, with grid and central orb
   - **Bars** — 32 chrome/gel bars with glass highlight, mirrored reflection, grid, peak caps, chrome ledge & scanlines
   - **Tunnel** — pseudo-3D flight through hexagonal rings in the theme's colors: one ring per beat once a tempo is detected (volume sets the speed until then), outlines wobbling with the spectrum, corner rails spiraling to a drifting vanishing point, and a white-hot ring launched down the tunnel on every kick
-  - **Particles** — spiral particle galaxy: sparks stream out from a glowing core along three spiral arms as short motion trails, colored along the theme gradient from core to rim, over a layer of slow parallax star dust; the field turns slowly, locked to the tempo once one is detected (one turn per 32 beats), the spectrum swells the arms by radius (bass at the core, highs at the rim) and each beat sends a bright shockwave through the arms and surges the flow and spin
+  - **Neon** — neon wireframe tunnel after an Envato preview clip: hexagon and rectangle frames built from broken neon bars tumble toward the viewer out of a glowing hexagonal core, each tilted on its own axes, flying two frames per beat once a tempo is detected (volume sets the speed until then) while the cage rolls one turn per 32 beats; rhythm drives the cool layer, which floods the stage in the theme's primary color on every beat and drops to near-black between (the clip's lit/dark strobe, held to the 3-per-second strobe cap), and notes drive the warm layer, whose contrasting-color bars light only where their pitch is sounding (bass along the bottom of the screen, treble across the top) with the loudest band burning white-hot
   - **Kaleidoscope** — neon kaleidoscope tunnel after the bundled reference clip: eight mirrored wedge rings are born at a white-hot center star and fly outward (one zoom cycle per bar once a tempo is detected, a volume-driven drift until then) while the mandala turns slowly (one turn per 32 beats), drawn additively in the theme's gradient; each wedge owns one slice of the spectrum so notes light the wedge carrying their pitch and the loudest band burns white-hot, and kick flashes keep to the 3-per-second strobe cap
 
 - **Lyrics overlay** — type lyrics, a track title or a shout-out into the **Lyrics** field under the sliders and toggle **Lyrics** (or press **L**) to lay it over any mode as big kinetic type, wrapped to fill the middle of the preview and output. Each character swells and thickens (regular → black weight) with the RMS volume on a wave that sweeps through the text (once per bar at full beat reactivity), every kick ripples out from the middle and punches the characters up, and the type runs along the theme's gradient with a kick-driven glow. Kick punches keep to the strobe cap; blackout and strobe cover it like the rest of the stage. Return, Esc or a click on the stage finishes editing; the single-key shortcuts are off while you type.
@@ -25,7 +25,7 @@ Native macOS SwiftUI app with six aesthetic visualizer modes reacting to **volum
   - Both live inputs use a 4096-point FFT via `Accelerate/vDSP`, a 64-band log-spaced spectrum, RMS volume, waveform samples, and dominant-frequency detection.
 
 - **Drum detection** — besides the tempo-tracked beat, every hit is classified into three voices by where its energy lands: **kick** (40–150 Hz low thump), **snare** (250 Hz–5 kHz mid crack) and **hat** (6–16 kHz high sizzle). Each voice's detector tracks the rise in power across its FFT bins relative to the program level, so it works for quiet and loud sources and ignores the Sensitivity trim and auto gain. Snares and hats must also lift most of their bins at once, the way noise does, which sets them apart from sung or played notes. Leakage between neighbors (a kick's beater click in the snare band, a snare's wires in the hat band) is masked while the neighbor is hitting. Visualizers read `beat.kick` / `beat.snare` / `beat.hat` (hit count, last hit time, strength, activity envelope, `pulse(at:)`), alongside the unchanged beat API.
-  - Each visualizer answers the drums its own way, on top of its beat effects: **Circle** kick shockwave, snare rim flare, hat LED twinkle · **Waves** kick lifts the low layer, snare jolts the mid layer, hats shimmer the high layer · **Bars** kick bounce, snare gloss (held to the strobe cap), hat cap glints · **Tunnel** kick breath, snare-lit rails, hat corner sparks · **Particles** kick core swell and galaxy breath, snare white-hot ring, hat glints · **Kaleidoscope** kick mandala pump, snare mirror flip, hat tip glints
+  - Each visualizer answers the drums its own way, on top of its beat effects: **Circle** kick shockwave, snare rim flare, hat LED twinkle · **Waves** kick lifts the low layer, snare jolts the mid layer, hats shimmer the high layer · **Bars** kick bounce, snare gloss (held to the strobe cap), hat cap glints · **Tunnel** kick breath, snare-lit rails, hat corner sparks · **Neon** kick frame punch and core swell, snare roll jolt and white outlines, hat bar-end glints · **Kaleidoscope** kick mandala pump, snare mirror flip, hat tip glints
 
 - **Controls**
   - Auto Gain (on by default; **AGC** badge in the HUD) + Sensitivity (0.3–2.2×, a trim on top of Auto Gain while it is on) + Smoothing (0–92%) + Beat reactivity (0–100%, 0 = volume-only)
@@ -75,7 +75,7 @@ AuraViz/
 │   │   ├── WaveVisualizerView.swift
 │   │   ├── Y2KBarVisualizerView.swift
 │   │   ├── TunnelVisualizerView.swift
-│   │   ├── ParticleVisualizerView.swift
+│   │   ├── NeonVisualizerView.swift
 │   │   ├── KaleidoscopeVisualizerView.swift
 │   │   ├── LyricsOverlayView.swift    # Kinetic-type lyrics laid over every mode
 │   │   └── ImageOverlayView.swift     # Uploaded images laid over every mode, blended and beat-pulsed
@@ -120,7 +120,7 @@ swiftc -sdk $(xcrun --show-sdk-path) \
 
 ## Performance
 
-- Circle can switch between 30 and 60 FPS, Waves animate at 30 FPS and Tunnel, Particles and Kaleidoscope at 60 FPS; all five stop scheduling frames when paused.
+- Circle can switch between 30 and 60 FPS, Waves animate at 30 FPS and Tunnel, Neon and Kaleidoscope at 60 FPS; all five stop scheduling frames when paused.
 - Bars redraw only when new audio data arrives; there is no independent animation timer.
 - Frequency-band boundaries are cached per sample rate, FFT storage is reused, and each analysis publishes one combined SwiftUI update.
 - The standalone packaging script uses whole-module optimization for its production binary.

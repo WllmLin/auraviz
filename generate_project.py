@@ -33,7 +33,7 @@ files = [
     ("WaveVisualizerView.swift", "AuraViz/Visualizers/WaveVisualizerView.swift"),
     ("Y2KBarVisualizerView.swift", "AuraViz/Visualizers/Y2KBarVisualizerView.swift"),
     ("TunnelVisualizerView.swift", "AuraViz/Visualizers/TunnelVisualizerView.swift"),
-    ("ParticleVisualizerView.swift", "AuraViz/Visualizers/ParticleVisualizerView.swift"),
+    ("NeonVisualizerView.swift", "AuraViz/Visualizers/NeonVisualizerView.swift"),
     ("KaleidoscopeVisualizerView.swift", "AuraViz/Visualizers/KaleidoscopeVisualizerView.swift"),
     ("LyricsOverlayView.swift", "AuraViz/Visualizers/LyricsOverlayView.swift"),
     ("ImageOverlayView.swift", "AuraViz/Visualizers/ImageOverlayView.swift"),
@@ -163,7 +163,7 @@ pbx += f"""\t\t{main_group_id} = {{
 \t\t\t\t{file_refs['WaveVisualizerView.swift']} /* WaveVisualizerView.swift */,
 \t\t\t\t{file_refs['Y2KBarVisualizerView.swift']} /* Y2KBarVisualizerView.swift */,
 \t\t\t\t{file_refs['TunnelVisualizerView.swift']} /* TunnelVisualizerView.swift */,
-\t\t\t\t{file_refs['ParticleVisualizerView.swift']} /* ParticleVisualizerView.swift */,
+\t\t\t\t{file_refs['NeonVisualizerView.swift']} /* NeonVisualizerView.swift */,
 \t\t\t\t{file_refs['KaleidoscopeVisualizerView.swift']} /* KaleidoscopeVisualizerView.swift */,
 \t\t\t\t{file_refs['LyricsOverlayView.swift']} /* LyricsOverlayView.swift */,
 \t\t\t\t{file_refs['ImageOverlayView.swift']} /* ImageOverlayView.swift */,
@@ -259,7 +259,7 @@ pbx += f"""\t\t{sources_phase} /* Sources */ = {{
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
 """
-for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","ParticleVisualizerView.swift","KaleidoscopeVisualizerView.swift","LyricsOverlayView.swift","ImageOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","ImageOverlays.swift","ControlSlider.swift","VisualizerStage.swift"]:
+for name in ["AuraVizApp.swift","ContentView.swift","AudioEngineManager.swift","BeatTracker.swift","Theme.swift","CircularVisualizerView.swift","WaveVisualizerView.swift","Y2KBarVisualizerView.swift","TunnelVisualizerView.swift","NeonVisualizerView.swift","KaleidoscopeVisualizerView.swift","LyricsOverlayView.swift","ImageOverlayView.swift","PerformanceState.swift","PerformanceCommands.swift","OutputWindow.swift","Presets.swift","FontCatalog.swift","ImageOverlays.swift","ControlSlider.swift","VisualizerStage.swift"]:
     pbx += f"\t\t\t\t{build_files[name]} /* {name} in Sources */,\n"
 pbx += """\t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;

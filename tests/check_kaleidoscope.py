@@ -74,8 +74,9 @@ for voice in ["kick", "snare", "hat"]:
 check("drum reactivity scaled", "drumReactivity.scaled(by: beatReactivity)" in view)
 
 # Persistence: pre-rename stored "Laser" still lands on Kaleidoscope.
-check("settings legacy mapping", '"Laser" ? .kaleidoscope' in read("AuraViz/PerformanceState.swift"))
-check("preset legacy mapping", '"Laser" ? .kaleidoscope' in read("AuraViz/Presets.swift"))
+check("legacy mapping", 'case "Laser": self = .kaleidoscope' in theme)
+check("settings use legacy mapping", "VisualMode.init(storedValue:)" in read("AuraViz/PerformanceState.swift"))
+check("presets use legacy mapping", "VisualMode.init(storedValue:)" in read("AuraViz/Presets.swift"))
 
 # Truncation guard: balanced delimiters in the new view.
 for open_c, close_c in [("{", "}"), ("(", ")"), ("[", "]")]:
