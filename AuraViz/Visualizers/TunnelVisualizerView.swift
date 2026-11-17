@@ -1,26 +1,29 @@
 import SwiftUI
 
-/// Hexagonal neon cage tunnel, after the bundled watermarked preview clip:
-/// hexagonal rings built from broken neon bars, tied together by six
-/// longitudinal corner rails and diagonal zigzag braces so the corridor
-/// reads as a cage of triangular panels spiraling to a white-hot core.
-/// Rings fly one per beat once a tempo is known (a volume-driven cruise
-/// until then), the whole cage rolls one turn per 32 beats, and every bar
-/// is drawn additively with a soft halo, a colored body and a white-hot
-/// core.
+/// Hexagonal box-truss tunnel, after the bundled watermarked preview clip:
+/// a corridor of wireframe boxes — each layer a ring of six boxes built from
+/// an inner and an outer hexagon joined by radial struts and longitudinal
+/// rails — with every layer twisted a little further than the last, so the
+/// corridor spirals toward a glowing core. The boxes are steel tubes trimmed
+/// with neon strips: the tubes only show when the stage is lit, the neon
+/// always glows. Layers fly two per beat once a tempo is known (a
+/// volume-driven cruise until then) and the corridor rolls one turn per 32
+/// beats.
 ///
 /// The music runs the clip's two lighting layers. Rhythm drives the cool
-/// layer: on every beat the tunnel floods with the theme's primary color
-/// and then drops to near-black, the clip's lit/dark strobe, with flashes
-/// held to the 3-per-second strobe cap, and every beat launches a bright
-/// hexagonal ring down the tunnel. Notes drive the warm layer: about a
-/// third of the bars (most of the diagonals) take the theme's contrasting
-/// colors and light only when the pitch region they cross is sounding —
-/// bass along the floor of the screen, treble across the top, mirrored
-/// left and right — so between beats the melody paints the dark tunnel,
-/// and the loudest band burns white-hot. Kicks punch the cage toward the
-/// viewer and swell the core, snares light the corner rails and jolt the
-/// roll, and hats spark a scatter of ring corners.
+/// layer: on every beat the whole stage floods with the theme's primary
+/// color — lighting the steel and turning the cool neon white-hot — and
+/// then drops to black, the clip's lit/dark strobe, with flashes held to the
+/// 3-per-second strobe cap; every beat also launches a fully lit double
+/// hexagon down the corridor. Notes drive the warm layer: boxes on the
+/// side walls are outlined in the theme's contrasting colors (one on the
+/// left, another on the right, with an accent mixed in, as in the clip) and
+/// burn with the pitch region they sit in — bass along the floor of the
+/// screen, treble across the top, mirrored left and right — so between
+/// beats the melody paints the dark corridor, and the loudest band burns
+/// white-hot. Kicks punch the corridor toward the viewer and swell the core,
+/// snares light the rails and jolt the roll, and hats spark a scatter of
+/// box corners.
 struct TunnelVisualizerView: View {
     var spectrum: [CGFloat]
     var volume: CGFloat
@@ -30,32 +33,41 @@ struct TunnelVisualizerView: View {
     var beat = BeatAnalysis()
     /// 0 keeps the volume-only look; 1 applies the full beat effects.
     var beatReactivity: Double = 0
-    /// Kicks punch the cage, snares light the rails, hats spark corners.
+    /// Kicks punch the corridor, snares light the rails, hats spark corners.
     var drumReactivity = DrumReactivity.off
 
     @State private var system = TunnelSystem()
 
-    /// Rings in flight along the tunnel, one spacing apart.
-    static let ringCount = 40
-    /// Camera-space depth of the nearest ring, and the gap between rings.
-    private static let nearDepth = 0.35
-    private static let spacing = 0.26
-    /// Bar ends nearer than this are clipped so the projection stays finite.
-    private static let clipDepth = 0.12
-    /// The tunnel twists this far (radians) from one ring to the next.
-    private static let twistPerRing = 0.02
+    /// Box layers in flight along the tunnel, one spacing apart.
+    static let ringCount = 24
+    /// Camera-space depth of the nearest layer, and the gap between layers.
+    private static let nearDepth = 0.30
+    private static let spacing = 0.56
+    /// How long each box is along the tunnel; the rest of the spacing is the
+    /// gap to the next layer, which doubles the outlines as in the clip.
+    private static let boxDepth = 0.42
+    /// Tube ends nearer than this are clipped so the projection stays finite.
+    private static let clipDepth = 0.10
+    /// The corridor twists this far (radians) from one layer to the next.
+    private static let twistPerRing = 0.21
+    /// The boxes sit between these two hexagon radii.
+    private static let innerRadius = 1.0
+    private static let outerRadius = 1.55
+    /// Radius of a steel tube in world units; neon strips are half as wide.
+    private static let tubeRadius = 0.030
     /// How far down the tunnel a beat ring appears, in world depth.
-    private static let beatRingDepth = 6.0
-    /// The same distance in ring spacings, for `TunnelSystem`'s spawns.
+    private static let beatRingDepth = 7.0
+    /// The same distance in layer spacings, for `TunnelSystem`'s spawns.
     static var beatRingSteps: Double { (beatRingDepth - nearDepth) / spacing }
-    /// Opacity steps the bars are batched into, about 1.75x apart, so the
-    /// dark phase can sit as far below the lit phase as it does in the clip.
-    private static let levelOpacities: [Double] = [0.06, 0.105, 0.18, 0.32, 0.56, 0.98]
-    private static let levelRatio = log(1.75)
-    /// Cool bars get shades of the primary color toward white; warm bars one
-    /// of the contrasting colors.
+    /// Opacity steps the tubes and strips are batched into, about 1.7x
+    /// apart, so the dark phase can sit as far below the lit phase as it
+    /// does in the clip.
+    private static let levelOpacities: [Double] = [0.07, 0.12, 0.21, 0.36, 0.62, 1.0]
+    private static let levelRatio = log(1.72)
+    /// Cool strips get shades of the primary color toward white; warm boxes
+    /// a left color, a right color and an accent.
     private static let coolShades = 4
-    private static let warmColors = 6
+    private static let warmColors = 3
     private static let hexagon: [(x: Double, y: Double)] = (0..<6).map { i in
         (x: cos(Double(i) * .pi / 3), y: sin(Double(i) * .pi / 3))
     }
@@ -98,211 +110,251 @@ struct TunnelVisualizerView: View {
         let s = size.visualizerScale
         // The vanishing point wanders slowly, so the tunnel seems to curve.
         let center = CGPoint(
-            x: w / 2 + CGFloat(sin(frame.travel * 0.13)) * w * 0.03,
-            y: h / 2 + CGFloat(cos(frame.travel * 0.11)) * h * 0.03
+            x: w / 2 + CGFloat(sin(frame.travel * 0.13)) * w * 0.02,
+            y: h / 2 + CGFloat(cos(frame.travel * 0.11)) * h * 0.02
         )
-        let reach = hypot(w, h) / 2
-        // A ring of radius 1 at depth 1 spans the short side; kicks widen
-        // the field of view so every ring jumps toward the viewer.
+        // A hexagon of radius 1 at depth 1 spans the short side; kicks widen
+        // the field of view so every layer jumps toward the viewer.
         let punch = 1 + 0.08 * accents.kick + 0.03 * frame.flash
         let focal = 0.5 * min(w, h) * CGFloat(punch)
         let colors = TunnelColors(palette: palette, hue: frame.hue)
         var glow = context
         glow.blendMode = .plusLighter
+        var solid = context
+        solid.blendMode = .normal
 
-        drawWash(in: glow, center: center, reach: reach, frame: frame, colors: colors)
-        drawCage(in: glow, center: center, focal: focal, scale: s, frame: frame, accents: accents, colors: colors)
-        drawBeatRings(in: glow, center: center, focal: focal, scale: s, frame: frame, accents: accents, colors: colors)
+        drawFlood(in: glow, size: size, center: center, frame: frame, colors: colors)
+        drawCorridor(glow: glow, solid: solid, center: center, focal: focal, scale: s, frame: frame, accents: accents, colors: colors)
         drawCore(in: glow, center: center, short: min(w, h), scale: s, frame: frame, accents: accents, colors: colors)
     }
 
     /// The clip's flood: on the lit beat the whole stage washes over in the
-    /// primary color, then drains back to black with the cool layer.
-    private func drawWash(in glow: GraphicsContext, center: CGPoint, reach: CGFloat, frame: TunnelFrame, colors: TunnelColors) {
-        let color = colors.cool[1].color
-        let inner = min(1, 0.08 * frame.lit + 0.24 * frame.flash + 0.04 * frame.energy)
-        let outer = min(1, 0.05 * frame.lit + 0.14 * frame.flash)
-        let radius = reach * 1.1
+    /// primary color, brightest toward the core, then drains back to black.
+    private func drawFlood(in glow: GraphicsContext, size: CGSize, center: CGPoint, frame: TunnelFrame, colors: TunnelColors) {
+        let lit = min(1, frame.lit)
+        guard lit > 0.01 else { return }
+        let base = colors.primary
+        let radius = hypot(size.width, size.height) / 2 * 1.05
         glow.fill(
-            Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)),
+            Path(CGRect(origin: .zero, size: size)),
             with: .radialGradient(
                 Gradient(stops: [
-                    .init(color: color.opacity(inner), location: 0),
-                    .init(color: color.opacity(outer), location: 0.55),
-                    .init(color: .clear, location: 1),
+                    .init(color: base.towardWhite(0.55).color.opacity(0.95 * lit), location: 0),
+                    .init(color: base.towardWhite(0.12).color.opacity(0.85 * lit), location: 0.25),
+                    .init(color: base.scaled(0.55).color.opacity(0.75 * lit), location: 1),
                 ]),
                 center: center, startRadius: 0, endRadius: radius
             )
         )
     }
 
-    /// What a bar is part of; diagonals lean warm (note-driven) and rails
-    /// answer snares, so the kinds light differently.
-    private enum BarKind {
-        case ring, rail, diagonal
+    /// What a tube is part of; each kind carries neon strips at its own rate.
+    private enum Member {
+        case innerRing, outerRing, strut, rail, outerRail
+
+        /// Chance a tube of this kind carries a neon strip on a cool box.
+        var neonChance: Double {
+            switch self {
+            case .innerRing: return 0.55
+            case .outerRing: return 0.4
+            case .strut, .rail, .outerRail: return 0.3
+            }
+        }
     }
 
-    /// Every ring in flight, far to near, tied to the next by corner rails
-    /// and diagonal braces. Each ring edge is split into one to three neon
-    /// dashes in 3D, and each dash becomes a tapered quad, wider at the
-    /// nearer end. Quads are batched by color and opacity step so the whole
-    /// cage is a few dozen fills instead of one per bar.
-    private func drawCage(in glow: GraphicsContext, center: CGPoint, focal: CGFloat, scale s: CGFloat, frame: TunnelFrame, accents: TunnelDrumAccents, colors: TunnelColors) {
+    /// One box's neon trim: cool strips, or a warm outline in one color.
+    private struct BoxTrim {
+        var isWarm: Bool
+        var warmIndex: Int
+    }
+
+    /// Every box layer in flight, far to near. Each layer is a ring of six
+    /// boxes between an inner and an outer hexagon, front and back, joined
+    /// by radial struts and longitudinal rails. Each tube becomes a tapered
+    /// steel quad, wider at the nearer end, and some carry a neon strip.
+    /// Quads are batched by color and opacity step so the whole corridor is
+    /// a few dozen fills instead of one per tube.
+    private func drawCorridor(glow: GraphicsContext, solid: GraphicsContext, center: CGPoint, focal: CGFloat, scale s: CGFloat, frame: TunnelFrame, accents: TunnelDrumAccents, colors: TunnelColors) {
         let levels = Self.levelOpacities.count
+        var steelBody = [Path](repeating: Path(), count: levels)
+        var steelSheen = [Path](repeating: Path(), count: levels)
         var buckets = [TunnelBucket](repeating: TunnelBucket(), count: (Self.coolShades + Self.warmColors) * levels)
         var sparks = Path()
-        let minHalfWidth = 0.45 * s
-        let maxHalfWidth = 7 * s
-        let sparkRadius = CGFloat(1.2 + 2.2 * accents.hat) * s
+        let minTube = 0.5 * s
+        let maxTube = 9 * s
+        let minStrip = 0.45 * s
+        let maxStrip = 6 * s
+        let sparkRadius = CGFloat(1.4 + 2.4 * accents.hat) * s
         let showSparks = accents.hat > 0.02
+        let lit = min(1, frame.lit)
+        // The steel only shows in the flood; the dark phase is pure black.
+        let steelLit = lit * Self.smoothstep(0.04, 0.35, lit)
         // Snares jolt the roll and push the rails toward white.
         let roll = frame.roll + 0.32 * accents.snare
         let count = Self.ringCount
-        let first = Int(frame.travel.rounded(.down)) + 1
+        // Starts one layer behind the near plane so the nearest layer fades
+        // out completely before it is dropped.
+        let first = Int(frame.travel.rounded(.down))
 
         func project(_ p: TunnelPoint) -> CGPoint {
             CGPoint(x: center.x + CGFloat(p.x / p.z) * focal, y: center.y + CGFloat(p.y / p.z) * focal)
         }
-        /// The six corners of ring `k` at depth `z`: a hexagon with a stable
-        /// per-ring radius, center offset and spin jitter, twisted a little
-        /// further than the ring before it.
-        func corners(ofRing k: Int, depth z: Double) -> [TunnelPoint] {
-            let spin = roll + (Double(k) * Self.twistPerRing).truncatingRemainder(dividingBy: 2 * .pi) + (Self.hash(k, 41) - 0.5) * 0.06
-            let radius = 0.94 + 0.20 * Self.hash(k, 42)
-            let ox = (Self.hash(k, 43) - 0.5) * 0.14
-            let oy = (Self.hash(k, 44) - 0.5) * 0.14
+        /// Layer `k`'s rotation: twisted a little further than the layer
+        /// before it, with a stable per-layer jitter.
+        func spin(ofRing k: Int) -> Double {
+            roll + (Double(k) * Self.twistPerRing).truncatingRemainder(dividingBy: 2 * .pi) + (Self.hash(k, 41) - 0.5) * 0.08
+        }
+        func corners(spin: Double, radius: Double, depth z: Double) -> [TunnelPoint] {
+            let c = cos(spin)
+            let sn = sin(spin)
             return Self.hexagon.map { unit in
-                TunnelPoint(
-                    x: (unit.x * cos(spin) - unit.y * sin(spin)) * radius + ox,
-                    y: (unit.x * sin(spin) + unit.y * cos(spin)) * radius + oy,
-                    z: z
-                )
+                TunnelPoint(x: (unit.x * c - unit.y * sn) * radius, y: (unit.x * sn + unit.y * c) * radius, z: z)
             }
         }
-        func depth(atSteps steps: Double) -> Double {
-            Self.nearDepth + steps * Self.spacing
-        }
-
-        // Ring corners are shared by the ring's own edges and the rails and
-        // diagonals to the next ring, so they are computed once, one ring
-        // past the far end for the last set of ties.
-        var allCorners: [[TunnelPoint]] = []
-        allCorners.reserveCapacity(count + 1)
-        for k in first...(first + count) {
-            allCorners.append(corners(ofRing: k, depth: depth(atSteps: Double(k) - frame.travel)))
-        }
-
-        /// Adds one neon bar between two camera-space points to its bucket.
-        func addBar(_ a: TunnelPoint, _ b: TunnelPoint, ring k: Int, salt: Int, kind: BarKind, fade: Double) {
+        func clipped(_ a: TunnelPoint, _ b: TunnelPoint) -> (TunnelPoint, TunnelPoint)? {
+            if a.z < Self.clipDepth && b.z < Self.clipDepth { return nil }
             var p0 = a
             var p1 = b
-            if p0.z < Self.clipDepth && p1.z < Self.clipDepth { return }
             if p0.z < Self.clipDepth { p0 = p0.lerp(to: p1, (Self.clipDepth - p0.z) / (p1.z - p0.z)) }
             if p1.z < Self.clipDepth { p1 = p1.lerp(to: p0, (Self.clipDepth - p1.z) / (p0.z - p1.z)) }
-            let q0 = project(p0)
-            let q1 = project(p1)
-            let barWidth = 0.022 + 0.016 * Self.hash(k, salt + 7)
-            let w0 = min(maxHalfWidth, max(minHalfWidth, CGFloat(0.5 * barWidth / p0.z) * focal))
-            let w1 = min(maxHalfWidth, max(minHalfWidth, CGFloat(0.5 * barWidth / p1.z) * focal))
+            return (p0, p1)
+        }
+        func level(for alpha: Double) -> Int {
+            min(levels - 1, max(0, Int((log(alpha / Self.levelOpacities[0]) / Self.levelRatio).rounded())))
+        }
+        func halfWidth(_ radius: Double, _ z: Double, _ lower: CGFloat, _ upper: CGFloat) -> CGFloat {
+            min(upper, max(lower, CGFloat(radius / z) * focal))
+        }
 
-            // The pitch region this bar crosses: 0 straight down (bass) to
+        /// Adds one tube between two camera-space points: steel if the stage
+        /// is lit, plus a neon strip along part of it if this tube has one.
+        func addTube(_ a: TunnelPoint, _ b: TunnelPoint, ring k: Int, salt: Int, member: Member, trim: BoxTrim, fade: Double, beatGlow: Double = 0) {
+            guard let tube = clipped(a, b) else { return }
+            let p0 = tube.0
+            let p1 = tube.1
+            let z = (p0.z + p1.z) / 2
+            let fog = exp(-max(0, z - 0.6) / 3.2)
+
+            let steelAlpha = fade * fog * steelLit
+            if steelAlpha > 0.03 {
+                let q0 = project(p0)
+                let q1 = project(p1)
+                let w0 = halfWidth(Self.tubeRadius, p0.z, minTube, maxTube)
+                let w1 = halfWidth(Self.tubeRadius, p1.z, minTube, maxTube)
+                let index = level(for: steelAlpha)
+                TunnelBucket.addQuad(to: &steelBody[index], q0, q1, w0, w1)
+                TunnelBucket.addQuad(to: &steelSheen[index], q0, q1, w0 * 0.4, w1 * 0.4)
+            }
+
+            // Where along the tube its neon strip runs, if it has one.
+            let t0: Double
+            let t1: Double
+            if beatGlow > 0 {
+                t0 = 0.03
+                t1 = 0.97
+            } else if trim.isWarm {
+                // Warm boxes are outlined almost edge to edge.
+                guard Self.hash(k, salt) < 0.6 else { return }
+                t0 = 0.03 + 0.12 * Self.hash(k, salt + 1)
+                t1 = 0.97 - 0.12 * Self.hash(k, salt + 2)
+            } else {
+                guard Self.hash(k, salt) < member.neonChance else { return }
+                t0 = 0.04 + 0.45 * Self.hash(k, salt + 1)
+                t1 = min(0.96, t0 + 0.2 + 0.55 * Self.hash(k, salt + 2))
+            }
+            guard let strip = clipped(a.lerp(to: b, t0), a.lerp(to: b, t1)) else { return }
+            let n0 = strip.0
+            let n1 = strip.1
+            let q0 = project(n0)
+            let q1 = project(n1)
+            let w0 = halfWidth(0.5 * Self.tubeRadius, n0.z, minStrip, maxStrip)
+            let w1 = halfWidth(0.5 * Self.tubeRadius, n1.z, minStrip, maxStrip)
+
+            // The pitch region this strip crosses: 0 straight down (bass) to
             // 1 straight up (treble).
             let mx = Double((q0.x + q1.x) / 2 - center.x)
             let my = Double((q0.y + q1.y) / 2 - center.y)
             let note = frame.note(at: atan2(abs(mx), my) / .pi)
             let peakBoost = note.isPeak ? 1.0 : 0.0
-            let z = (p0.z + p1.z) / 2
-            let fog = min(1, 0.3 + 0.7 * exp(-(z - 0.5) / 3.5))
-            // Distant bars whiten toward the core, as in the clip.
-            let depthWhite = 0.25 * min(1, z / 7)
-            let warmChance = (kind == .diagonal ? 0.55 : 0.22) * min(1.5, max(0.3, 1.6 - z / 6))
-            let warm = Self.hash(k, salt + 3) < warmChance
 
             let colorIndex: Int
-            let alpha: Double
-            if warm {
-                // Warm bars hold the dark phase and are flooded over when lit.
-                alpha = fade * fog * (0.06 + 0.94 * note.energy) * (1 - 0.65 * min(1, frame.lit)) * (1 + 0.25 * peakBoost)
-                colorIndex = Self.coolShades + min(Self.warmColors - 1, Int(Self.hash(k, salt + 4) * Double(Self.warmColors)))
+            var alpha: Double
+            if trim.isWarm && beatGlow == 0 {
+                // Warm boxes hold the dark phase and are flooded over when lit.
+                alpha = fade * fog * (0.3 + 0.7 * note.energy) * (1 - 0.6 * lit) * (1 + 0.3 * peakBoost)
+                colorIndex = Self.coolShades + trim.warmIndex
             } else {
-                var litAlpha = fade * fog * frame.lit * (0.6 + 0.4 * note.energy + 0.3 * peakBoost)
-                var whiteness = depthWhite + 0.45 * note.energy + 0.35 * peakBoost
-                if kind == .rail {
-                    litAlpha *= 0.75 + 0.9 * accents.snare
+                // Distant strips whiten toward the core, as in the clip.
+                let depthWhite = 0.25 * min(1, z / 6)
+                var whiteness = 0.05 + 0.3 * lit + 0.6 * beatGlow
+                whiteness += depthWhite + 0.2 * peakBoost
+                alpha = fade * fog * (0.16 + 0.84 * lit + 0.8 * beatGlow)
+                if member == .rail || member == .outerRail {
+                    alpha *= 1 + 0.9 * accents.snare
                     whiteness += 0.7 * accents.snare
                 }
-                alpha = litAlpha
                 colorIndex = min(Self.coolShades - 1, Int(whiteness * Double(Self.coolShades)))
             }
-            guard alpha > 0.035 else { return }
-            let level = min(levels - 1, max(0, Int((log(alpha / Self.levelOpacities[0]) / Self.levelRatio).rounded())))
-            buckets[colorIndex * levels + level].add(q0, q1, w0, w1)
+            alpha = min(1, alpha)
+            guard alpha > 0.03 else { return }
+            buckets[colorIndex * levels + level(for: alpha)].add(q0, q1, w0, w1)
         }
 
         for offset in stride(from: count - 1, through: 0, by: -1) {
             let k = first + offset
-            // Steps from the near plane: 0 has just flown past the viewer,
-            // `count` is just being born in the core.
+            // Steps from the near plane: below 0 is flying past the viewer,
+            // `count - 1` is just being born in the core.
             let steps = Double(k) - frame.travel
-            let z = depth(atSteps: steps)
-            let fadeIn = min(1, (Double(count) - steps) / 3)
-            let fadeOut = Self.smoothstep(Self.nearDepth, Self.nearDepth + 0.25, z)
+            let z = Self.nearDepth + steps * Self.spacing
+            let fadeIn = min(1, (Double(count - 1) - steps) / 4)
+            let fadeOut = Self.smoothstep(Self.nearDepth - 0.1, Self.nearDepth + 0.3, z)
             let fade = fadeIn * fadeOut
             guard fade > 0.01 else { continue }
-            let ringCorners = allCorners[offset]
-            let next = allCorners[offset + 1]
-            // The ring's own center, so an inset twin outline shrinks toward
-            // it instead of toward the tunnel axis.
-            let ringCenter = TunnelPoint(
-                x: ringCorners.reduce(0) { $0 + $1.x } / 6,
-                y: ringCorners.reduce(0) { $0 + $1.y } / 6,
-                z: z
-            )
+            let beatGlow = frame.beatRings.first(where: { $0.layer == k })?.strength ?? 0
 
-            let insets = Self.hash(k, 14) < 0.55 ? [1.0, 0.86] : [1.0]
-            for (ring, inset) in insets.enumerated() {
-                let points = ringCorners.map { ringCenter.lerp(to: $0, inset) }
-                for i in 0..<6 {
-                    let salt = 64 + (ring * 8 + i) * 8
-                    guard Self.hash(k, salt) >= 0.12 else { continue }
-                    let a = points[i]
-                    let b = points[(i + 1) % 6]
-                    let pattern = Self.hash(k, salt + 1)
-                    let dashCount = pattern < 0.3 ? 1 : (pattern < 0.7 ? 2 : 3)
-                    let gap = 0.05 + 0.08 * Self.hash(k, salt + 2)
-                    let jitter1 = (Self.hash(k, salt + 5) - 0.5) * 0.16
-                    let jitter2 = (Self.hash(k, salt + 6) - 0.5) * 0.16
-                    for dash in 0..<dashCount {
-                        let t0 = Self.dashBoundary(dash, of: dashCount, jitter1: jitter1, jitter2: jitter2) + (dash == 0 ? 0.02 : gap)
-                        let t1 = Self.dashBoundary(dash + 1, of: dashCount, jitter1: jitter1, jitter2: jitter2) - (dash == dashCount - 1 ? 0.02 : gap)
-                        guard t1 > t0 else { continue }
-                        addBar(a.lerp(to: b, t0), a.lerp(to: b, t1), ring: k, salt: salt, kind: .ring, fade: fade)
-                    }
-                }
-            }
+            let angle = spin(ofRing: k)
+            let backZ = z + Self.boxDepth
+            let frontInner = corners(spin: angle, radius: Self.innerRadius, depth: z)
+            let frontOuter = corners(spin: angle, radius: Self.outerRadius, depth: z)
+            let backInner = corners(spin: angle, radius: Self.innerRadius, depth: backZ)
+            let backOuter = corners(spin: angle, radius: Self.outerRadius, depth: backZ)
 
             for j in 0..<6 {
-                addBar(ringCorners[j], next[j], ring: k, salt: 200 + j * 8, kind: .rail, fade: fade)
-                // Diagonal braces zigzag to the next ring's next corner,
-                // closing the triangular panels of the cage.
-                if Self.hash(k, 300 + j * 8) < 0.55 {
-                    addBar(ringCorners[j], next[(j + 1) % 6], ring: k, salt: 300 + j * 8, kind: .diagonal, fade: fade)
-                }
-                if Self.hash(k, 350 + j * 8) < 0.35 {
-                    addBar(ringCorners[j], next[(j + 5) % 6], ring: k, salt: 350 + j * 8, kind: .diagonal, fade: fade)
-                }
-                // Short stray dashes ride some rails, as in the clip.
-                if Self.hash(k, 400 + j * 8) < 0.5 {
-                    let t0 = Self.hash(k, 401 + j * 8) * 0.7
-                    let t1 = t0 + 0.18 + 0.2 * Self.hash(k, 402 + j * 8)
-                    addBar(ringCorners[j].lerp(to: next[j], t0), ringCorners[j].lerp(to: next[j], t1), ring: k, salt: 400 + j * 8, kind: .diagonal, fade: fade)
-                }
-                // Each hat sparks a fresh scatter of ring corners.
+                let n = (j + 1) % 6
+                // Boxes on the side walls may be outlined warm: left and
+                // right get different colors, with an accent mixed in.
+                let faceAngle = angle + (Double(j) + 0.5) * .pi / 3
+                let band = Self.smoothstep(0.55, 0.85, abs(cos(faceAngle)))
+                let warmPick = Self.hash(k, 610 + j)
+                let trim = BoxTrim(
+                    isWarm: Self.hash(k, 600 + j) < 0.4 * band,
+                    warmIndex: warmPick < 0.2 ? 2 : (cos(faceAngle) < 0 ? 0 : 1)
+                )
+                addTube(frontInner[j], frontInner[n], ring: k, salt: 100 + j * 8, member: .innerRing, trim: trim, fade: fade, beatGlow: beatGlow)
+                addTube(frontOuter[j], frontOuter[n], ring: k, salt: 160 + j * 8, member: .outerRing, trim: trim, fade: fade, beatGlow: beatGlow)
+                addTube(frontInner[j], frontOuter[j], ring: k, salt: 220 + j * 8, member: .strut, trim: trim, fade: fade)
+                addTube(backInner[j], backInner[n], ring: k, salt: 280 + j * 8, member: .innerRing, trim: trim, fade: fade)
+                addTube(backOuter[j], backOuter[n], ring: k, salt: 340 + j * 8, member: .outerRing, trim: trim, fade: fade)
+                addTube(backInner[j], backOuter[j], ring: k, salt: 400 + j * 8, member: .strut, trim: trim, fade: fade)
+                addTube(frontInner[j], backInner[j], ring: k, salt: 460 + j * 8, member: .rail, trim: trim, fade: fade)
+                addTube(frontOuter[j], backOuter[j], ring: k, salt: 520 + j * 8, member: .outerRail, trim: trim, fade: fade)
+                // Each hat sparks a fresh scatter of box corners.
                 if showSparks && fade > 0.2 && accents.hatHits.scatter(k &* 8 &+ j) < 0.08 {
-                    let q = project(ringCorners[j])
+                    let q = project(frontInner[j])
                     sparks.addEllipse(in: CGRect(x: q.x - sparkRadius, y: q.y - sparkRadius, width: sparkRadius * 2, height: sparkRadius * 2))
                 }
             }
+        }
+
+        // Steel: a dark body that shades whatever is behind it, then a
+        // light sheen down the middle so the tubes read as round.
+        let bodyColor = colors.primary.scaled(0.22).color
+        let sheenColor = colors.primary.towardWhite(0.45).color
+        for index in 0..<levels where !steelBody[index].isEmpty {
+            solid.fill(steelBody[index], with: .color(bodyColor.opacity(0.7 * Self.levelOpacities[index])))
+        }
+        for index in 0..<levels where !steelSheen[index].isEmpty {
+            glow.fill(steelSheen[index], with: .color(sheenColor.opacity(0.5 * Self.levelOpacities[index])))
         }
 
         for index in buckets.indices where !buckets[index].isEmpty {
@@ -317,14 +369,14 @@ struct TunnelVisualizerView: View {
                 core = tint.towardWhite(0.65)
             } else {
                 tint = colors.warm[colorIndex - Self.coolShades]
-                core = tint.towardWhite(0.5)
+                core = tint.towardWhite(0.45)
             }
             // The faintest steps skip their halos; they wouldn't show.
             if level >= 2 {
-                glow.fill(bucket.haloWide, with: .color(tint.color.opacity(0.10 * opacity)))
-                glow.fill(bucket.haloNear, with: .color(tint.color.opacity(0.24 * opacity)))
+                glow.fill(bucket.haloWide, with: .color(tint.color.opacity(0.14 * opacity)))
+                glow.fill(bucket.haloNear, with: .color(tint.color.opacity(0.30 * opacity)))
             }
-            glow.fill(bucket.body, with: .color(tint.color.opacity(0.8 * opacity)))
+            glow.fill(bucket.body, with: .color(tint.color.opacity(0.85 * opacity)))
             glow.fill(bucket.core, with: .color(core.color.opacity(min(1, 0.95 * opacity))))
         }
 
@@ -333,44 +385,12 @@ struct TunnelVisualizerView: View {
         }
     }
 
-    /// Beat rings — white-hot hexagons in a bloom of the primary color,
-    /// launched down the tunnel on every beat and flying with the cage.
-    private func drawBeatRings(in glow: GraphicsContext, center: CGPoint, focal: CGFloat, scale s: CGFloat, frame: TunnelFrame, accents: TunnelDrumAccents, colors: TunnelColors) {
-        guard beatReactivity > 0 else { return }
-        let roll = frame.roll + 0.32 * accents.snare
-        let rim = colors.cool[Self.coolShades - 1].color
-        for beatRing in frame.beatRings {
-            let steps = beatRing.position - frame.travel
-            let z = Self.nearDepth + steps * Self.spacing
-            guard steps > 0.2, steps < Double(Self.ringCount) else { continue }
-            let born = min(1, steps / 2)
-            let fades = min(1, (Double(Self.ringCount) - steps) / 6)
-            let alpha = min(1, born * fades * beatReactivity * (0.5 + 0.5 * beatRing.strength))
-            guard alpha > 0.01 else { continue }
-            let r = focal / CGFloat(z)
-            let spin = roll + (beatRing.position * Self.twistPerRing).truncatingRemainder(dividingBy: 2 * .pi)
-            var hex = Path()
-            for (i, unit) in Self.hexagon.enumerated() {
-                let p = CGPoint(
-                    x: center.x + CGFloat(unit.x * cos(spin) - unit.y * sin(spin)) * r,
-                    y: center.y + CGFloat(unit.x * sin(spin) + unit.y * cos(spin)) * r
-                )
-                if i == 0 { hex.move(to: p) } else { hex.addLine(to: p) }
-            }
-            hex.closeSubpath()
-            let lineWidth = min(9 * s, s * CGFloat(1.2 + 3.5 / z))
-            glow.stroke(hex, with: .color(rim.opacity(alpha * 0.18)), lineWidth: lineWidth * 6)
-            glow.stroke(hex, with: .color(rim.opacity(alpha * 0.45)), lineWidth: lineWidth * 2.5)
-            glow.stroke(hex, with: .color(.white.opacity(alpha)), lineWidth: lineWidth)
-        }
-    }
-
-    /// The hot hexagonal core at the vanishing point: a glow that swells on
-    /// kicks and lit beats, with small hexagons streaming out of it one per
-    /// beat, matching the rings' flight.
+    /// The hot core at the vanishing point: a glow that holds through the
+    /// dark phase, swells on kicks and lit beats, and streams small
+    /// hexagons outward, one per layer flown.
     private func drawCore(in glow: GraphicsContext, center: CGPoint, short: CGFloat, scale s: CGFloat, frame: TunnelFrame, accents: TunnelDrumAccents, colors: TunnelColors) {
         let swell = 1 + 0.45 * accents.kick + 0.2 * frame.flash + 0.1 * frame.energy
-        let radius = short * 0.075 * CGFloat(swell)
+        let radius = short * 0.06 * CGFloat(swell)
         let lit = min(1, frame.lit)
         let haloColor = colors.cool[2].color
         let halo = radius * 4
@@ -378,8 +398,8 @@ struct TunnelVisualizerView: View {
             Path(ellipseIn: CGRect(x: center.x - halo, y: center.y - halo, width: halo * 2, height: halo * 2)),
             with: .radialGradient(
                 Gradient(stops: [
-                    .init(color: haloColor.opacity(0.16 + 0.22 * lit), location: 0),
-                    .init(color: haloColor.opacity(0.05 + 0.08 * lit), location: 0.35),
+                    .init(color: haloColor.opacity(0.5 + 0.4 * lit), location: 0),
+                    .init(color: haloColor.opacity(0.12 + 0.15 * lit), location: 0.3),
                     .init(color: .clear, location: 1),
                 ]),
                 center: center, startRadius: 0, endRadius: halo
@@ -391,45 +411,38 @@ struct TunnelVisualizerView: View {
         for j in 0..<3 {
             let phase = (frame.travel + Double(j) / 3).truncatingRemainder(dividingBy: 1)
             let fade = sin(.pi * phase)
-            let r = radius * CGFloat(0.25 + 0.95 * phase)
+            let r = radius * CGFloat(0.3 + 1.1 * phase)
+            let spin = roll + phase * Self.twistPerRing
             var hex = Path()
             for (i, unit) in Self.hexagon.enumerated() {
                 let p = CGPoint(
-                    x: center.x + CGFloat(unit.x * cos(roll) - unit.y * sin(roll)) * r,
-                    y: center.y + CGFloat(unit.x * sin(roll) + unit.y * cos(roll)) * r
+                    x: center.x + CGFloat(unit.x * cos(spin) - unit.y * sin(spin)) * r,
+                    y: center.y + CGFloat(unit.x * sin(spin) + unit.y * cos(spin)) * r
                 )
                 if i == 0 { hex.move(to: p) } else { hex.addLine(to: p) }
             }
             hex.closeSubpath()
-            glow.stroke(hex, with: .color(lineColor.opacity(0.18 * fade * (0.5 + 0.5 * lit))), lineWidth: 6 * s)
-            glow.stroke(hex, with: .color(lineColor.opacity(fade * (0.55 + 0.45 * lit))), lineWidth: 1.6 * s)
-            glow.stroke(hex, with: .color(.white.opacity(0.8 * fade * (0.4 + 0.6 * lit))), lineWidth: 0.7 * s)
+            glow.stroke(hex, with: .color(lineColor.opacity(0.2 * fade * (0.5 + 0.5 * lit))), lineWidth: 6 * s)
+            glow.stroke(hex, with: .color(lineColor.opacity(fade * (0.6 + 0.4 * lit))), lineWidth: 1.6 * s)
+            glow.stroke(hex, with: .color(.white.opacity(0.8 * fade * (0.5 + 0.5 * lit))), lineWidth: 0.7 * s)
         }
 
-        let hot = radius * 0.45
+        let hot = radius * 0.6
         glow.fill(
             Path(ellipseIn: CGRect(x: center.x - hot, y: center.y - hot, width: hot * 2, height: hot * 2)),
-            with: .radialGradient(Gradient(colors: [.white.opacity(0.18 + 0.22 * lit), .clear]), center: center, startRadius: 0, endRadius: hot)
+            with: .radialGradient(Gradient(colors: [.white.opacity(0.5 + 0.4 * lit), .clear]), center: center, startRadius: 0, endRadius: hot)
         )
     }
 
     // MARK: - Helpers
-
-    /// Where dash boundary `j` of `count` falls along an edge, jittered so
-    /// the breaks don't line up from ring to ring.
-    private static func dashBoundary(_ j: Int, of count: Int, jitter1: Double, jitter2: Double) -> Double {
-        if j == 0 { return 0 }
-        if j == count { return 1 }
-        return Double(j) / Double(count) + (j == 1 ? jitter1 : jitter2)
-    }
 
     private static func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
         let t = min(1, max(0, (x - edge0) / (edge1 - edge0)))
         return t * t * (3 - 2 * t)
     }
 
-    /// A stable pseudo-random 0..<1 for feature `salt` of ring `ring`, so a
-    /// ring keeps its shape for its whole flight and the next one through
+    /// A stable pseudo-random 0..<1 for feature `salt` of layer `ring`, so a
+    /// layer keeps its trim for its whole flight and the next one through
     /// the same slot gets a new one.
     static func hash(_ ring: Int, _ salt: Int) -> Double {
         var x = (UInt64(bitPattern: Int64(ring)) &* 0x9E37_79B9_7F4A_7C15) ^ (UInt64(bitPattern: Int64(salt)) &* 0xBF58_476D_1CE4_E5B9)
@@ -437,6 +450,13 @@ struct TunnelVisualizerView: View {
         x = x &* 0x94D0_49BB_1331_11EB
         x ^= x >> 29
         return Double(x >> 11) / Double(1 << 53)
+    }
+}
+
+private extension ThemePalette.RGB {
+    /// This color darkened toward black by `factor` (1 keeps it).
+    func scaled(_ factor: Double) -> ThemePalette.RGB {
+        ThemePalette.RGB(r: r * factor, g: g * factor, b: b * factor)
     }
 }
 
@@ -451,8 +471,8 @@ private struct TunnelPoint {
     }
 }
 
-/// Quads for one color and opacity step, in four passes from soft halo to
-/// white-hot core. Every quad winds the same way, so overlaps fill once.
+/// Neon quads for one color and opacity step, in four passes from soft halo
+/// to white-hot core. Every quad winds the same way, so overlaps fill once.
 private struct TunnelBucket {
     var haloWide = Path()
     var haloNear = Path()
@@ -461,20 +481,22 @@ private struct TunnelBucket {
     var isEmpty = true
 
     mutating func add(_ a: CGPoint, _ b: CGPoint, _ widthA: CGFloat, _ widthB: CGFloat) {
+        guard hypot(b.x - a.x, b.y - a.y) > 0.01 else { return }
+        Self.addQuad(to: &haloWide, a, b, widthA * 3.4, widthB * 3.4)
+        Self.addQuad(to: &haloNear, a, b, widthA * 2.0, widthB * 2.0)
+        Self.addQuad(to: &body, a, b, widthA, widthB)
+        Self.addQuad(to: &core, a, b, widthA * 0.45, widthB * 0.45)
+        isEmpty = false
+    }
+
+    /// A quad from `a` to `b`, `wa` and `wb` wide on either side at each end.
+    static func addQuad(to path: inout Path, _ a: CGPoint, _ b: CGPoint, _ wa: CGFloat, _ wb: CGFloat) {
         let dx = b.x - a.x
         let dy = b.y - a.y
         let length = hypot(dx, dy)
         guard length > 0.01 else { return }
         let nx = -dy / length
         let ny = dx / length
-        Self.addQuad(to: &haloWide, a, b, nx, ny, widthA * 3.2, widthB * 3.2)
-        Self.addQuad(to: &haloNear, a, b, nx, ny, widthA * 1.9, widthB * 1.9)
-        Self.addQuad(to: &body, a, b, nx, ny, widthA, widthB)
-        Self.addQuad(to: &core, a, b, nx, ny, widthA * 0.42, widthB * 0.42)
-        isEmpty = false
-    }
-
-    private static func addQuad(to path: inout Path, _ a: CGPoint, _ b: CGPoint, _ nx: CGFloat, _ ny: CGFloat, _ wa: CGFloat, _ wb: CGFloat) {
         path.move(to: CGPoint(x: a.x + nx * wa, y: a.y + ny * wa))
         path.addLine(to: CGPoint(x: b.x + nx * wb, y: b.y + ny * wb))
         path.addLine(to: CGPoint(x: b.x - nx * wb, y: b.y - ny * wb))
@@ -483,18 +505,21 @@ private struct TunnelBucket {
     }
 }
 
-/// The frame's colors: shades of the primary color for the cool layer and
-/// contrasting stops of the theme gradient for the warm accents.
+/// The frame's colors: the primary color and its shades toward white for
+/// the flood, steel and cool strips, and three contrasting stops of the
+/// theme gradient for the warm boxes (left, right and an accent).
 private struct TunnelColors {
+    let primary: ThemePalette.RGB
     let cool: [ThemePalette.RGB]
     let warm: [ThemePalette.RGB]
 
     init(palette: ThemePalette, hue: Double) {
         let base = palette.sample(hue)
-        cool = [0, 0.28, 0.52, 0.8].map { base.towardWhite($0) }
+        primary = base
+        cool = [0, 0.3, 0.6, 0.85].map { base.towardWhite($0) }
         // Spread across the far side of the gradient from the primary.
-        warm = (0..<6).map { j in
-            let u = hue + 0.3 + 0.4 * Double(j) / 5
+        warm = [0.35, 0.65, 0.5].map { offset in
+            let u = hue + offset
             return palette.sample(1 - abs(2 * u.truncatingRemainder(dividingBy: 1) - 1))
         }
     }
@@ -509,22 +534,22 @@ private struct TunnelDrumAccents {
     var hatHits: DrumHits
 }
 
-/// A bright ring launched on a beat, in absolute ring-spacing steps along
-/// the tunnel, flying with the cage until it passes the viewer.
+/// A fully lit layer launched on a beat, by its absolute layer index, flying
+/// with the corridor until it passes the viewer.
 private struct TunnelBeatRing {
-    var position: Double
+    var layer: Int
     var strength: Double
 }
 
 /// Immutable draw inputs for one frame, advanced by `TunnelSystem`.
 private struct TunnelFrame {
-    /// Rings flown past the viewer so far; the fraction is the progress
+    /// Layers flown past the viewer so far; the fraction is the progress
     /// toward the next.
     var travel = 0.0
     var roll = 0.0
-    /// Cool layer level: the beat's lit/dark strobe, or a volume glow at 0
-    /// beat reactivity.
-    var lit = 0.3
+    /// Flood level: the beat's lit/dark strobe, or a volume glow at 0 beat
+    /// reactivity.
+    var lit = 0.2
     /// Rate-limited beat flash, already scaled by beat reactivity.
     var flash = 0.0
     var energy = 0.0
@@ -553,13 +578,13 @@ private struct TunnelFrame {
 /// `TimelineView` update without invalidating SwiftUI state.
 private final class TunnelSystem {
     static let noteBins = 12
-    /// Rings flown per beat once synced to the tempo.
-    private static let ringsPerBeat = 1.0
+    /// Layers flown per beat once synced to the tempo; the clip races.
+    private static let ringsPerBeat = 2.0
     /// One full roll every 32 beats once synced to the tempo.
     private static let rollPerBeat = 2 * Double.pi / 32
     /// The lit phase holds briefly at full, then drains, as in the clip.
-    private static let litHold: TimeInterval = 0.07
-    private static let litDecay: TimeInterval = 0.16
+    private static let litHold: TimeInterval = 0.08
+    private static let litDecay: TimeInterval = 0.14
     private static let bassAttack: TimeInterval = 0.04
     private static let bassRelease: TimeInterval = 0.4
     private static let maxBeatRings = 16
@@ -568,7 +593,7 @@ private final class TunnelSystem {
     private let rollPhase = BeatSyncedPhase()
     private var notes = [Double](repeating: 0, count: noteBins)
     private var bass = 0.0
-    private var calmLit = 0.3
+    private var calmLit = 0.2
     private var flashTime: TimeInterval = -.infinity
     private var flashStrength = 0.0
     private var lastBeatCount: Int?
@@ -585,12 +610,12 @@ private final class TunnelSystem {
 
         let energy = min(1, max(0, volume))
         let synced = beat.bpm > 0 ? beatReactivity : 0
-        // One ring per beat once a tempo is known; until then, cruise
-        // between 0.5 and 4 rings per second with the volume. Integrated,
-        // so gaining or losing the tempo changes speed without a jump.
+        // Two layers per beat once a tempo is known; until then, cruise
+        // between 1 and 5 layers per second with the volume. Integrated, so
+        // gaining or losing the tempo changes speed without a jump.
         let travel = travelPhase.advance(
             to: time,
-            wallRate: 0.5 + 3.5 * energy,
+            wallRate: 1 + 4 * energy,
             gridPhase: beat.clock.beatPhase(at: now),
             gridRate: Self.ringsPerBeat,
             nominalGridSpeed: beat.clock.beatsPerSecond,
@@ -605,10 +630,13 @@ private final class TunnelSystem {
             reactivity: synced
         )
 
-        // Every beat launches a bright ring ahead of the viewer; the
-        // lit/dark strobe accepts a new beat only past the strobe cap.
+        // Every beat lights a whole layer far down the corridor; the lit/dark
+        // strobe accepts a new beat only past the strobe cap.
         if let lastBeatCount, beat.beatCount != lastBeatCount {
-            beatRings.append(TunnelBeatRing(position: travel + TunnelVisualizerView.beatRingSteps, strength: Double(beat.beatStrength)))
+            let layer = Int((travel + TunnelVisualizerView.beatRingSteps).rounded())
+            if beatRings.last?.layer != layer {
+                beatRings.append(TunnelBeatRing(layer: layer, strength: min(1, beatReactivity * (0.5 + 0.5 * Double(beat.beatStrength)))))
+            }
             if beatRings.count > Self.maxBeatRings {
                 beatRings.removeFirst(beatRings.count - Self.maxBeatRings)
             }
@@ -618,23 +646,23 @@ private final class TunnelSystem {
             }
         }
         lastBeatCount = beat.beatCount
-        beatRings.removeAll { $0.position - travel < 0 }
+        beatRings.removeAll { Double($0.layer) - travel < 0 }
         let age = max(0, now - flashTime)
-        let envelope = (age < Self.litHold ? 1 : exp(-(age - Self.litHold) / Self.litDecay)) * (0.45 + 0.55 * flashStrength)
+        let envelope = (age < Self.litHold ? 1 : exp(-(age - Self.litHold) / Self.litDecay)) * (0.5 + 0.5 * flashStrength)
 
         let bassTarget = Double(min(1, max(0, beat.bassEnvelope(at: now))))
         let bassTau = bassTarget > bass ? Self.bassAttack : Self.bassRelease
         bass += (bassTarget - bass) * (1 - exp(-dt / bassTau))
 
-        // Without beats the cool layer glows with the volume; with them it
-        // drops near black between flashes, like the clip's dark frames.
-        let calmTarget = 0.28 + 0.5 * energy + 0.3 * bass
+        // Without beats the flood glows gently with the volume; with them it
+        // drops to black between flashes, like the clip's dark frames.
+        let calmTarget = 0.12 + 0.35 * energy + 0.25 * bass
         calmLit += (calmTarget - calmLit) * (1 - exp(-dt / 0.12))
-        let beatLit = 0.07 + 0.18 * bass + 0.85 * envelope
+        let beatLit = 0.03 + 0.1 * bass + 0.97 * envelope
         let lit = min(1.1, (1 - beatReactivity) * calmLit + beatReactivity * beatLit)
 
         // Notes: bin k owns spectrum slice k, bass to treble; quick to rise,
-        // slower to fall so a held note keeps its bars lit.
+        // slower to fall so a held note keeps its boxes lit.
         let spectrumGain = 0.6 + 0.4 * min(2.2, max(0.3, sensitivity))
         var peakNote = -1
         var peakLevel = 0.15

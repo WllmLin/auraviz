@@ -4,10 +4,13 @@
 Run with: python3 tests/check_tunnel.py
 Needs only Python 3 — no Xcode, no macOS tools — so it runs anywhere.
 It pins the shipped contract: the Tunnel mode/file/routing stay, the old
-wobbly-ring look is gone, and the view carries the watermarked preview
-clip's look (hexagonal cage corridor of broken neon bars with rails and
-diagonal braces, glowing core, lit/dark strobe) plus the rhythm/note
-sync hooks (beat-synced flight, beat rings, per-region note energies).
+wobbly-ring and sparse-cage looks are gone, and the view carries the
+watermarked preview clip's look (a twisted corridor of hexagonal box
+layers — inner and outer hexagons, radial struts and rails — built from
+steel tubes that show only in the flood, trimmed with cool neon strips and
+warm side-wall box outlines, around a glowing core, with a full-stage
+lit/dark strobe) plus the rhythm/note sync hooks (beat-synced flight, beat
+rings, per-region note energies).
 """
 import pathlib
 import sys
@@ -43,19 +46,29 @@ for label, rel in [("pbxproj", "AuraViz.xcodeproj/project.pbxproj"), ("build.sh"
 check("old radial-profile wobble gone", "radialProfile" not in view and "spectrumLevel" not in view)
 check("old flight/palette helpers gone", "TunnelFlight" not in view and "TunnelPalette" not in view)
 
-# Reference-clip look: hexagonal cage corridor — rings tied by longitudinal
-# rails and diagonal braces, edges broken into dashes, additive neon bars
-# batched by color/level, with a glowing hexagonal core.
-check("hexagon rings", "hexagon" in view and "ringCount" in view)
-check("longitudinal rails", "rail" in view.lower())
-check("diagonal braces", "diagonal" in view.lower())
-check("edges broken into dashes", "dashCount" in view and "dashBoundary" in view)
-check("perspective projection with near clip", "clipDepth" in view and "/ p0.z" in view)
-check("tapered bar buckets", "TunnelBucket" in view)
+# The previous sparse cage (dashed rings with diagonal braces, faint wash)
+# is replaced by the box-truss corridor.
+check("sparse-cage braces gone", "diagonal" not in view.lower() and "dashBoundary" not in view)
+check("faint wash replaced by flood", "drawWash" not in view and "drawFlood" in view)
+
+# Reference-clip look: a twisted corridor of hexagonal box layers — inner
+# and outer hexagons joined by radial struts and longitudinal rails — whose
+# steel tubes show only in the flood and whose neon strips glow additively,
+# batched by color/level, around a glowing core.
+check("hexagon layers", "hexagon" in view and "ringCount" in view)
+check("box layers between two hexagon radii", "innerRadius" in view and "outerRadius" in view and "boxDepth" in view)
+check("struts and rails", ".strut" in view and ".rail" in view and ".outerRail" in view)
+check("corridor twists per layer", "twistPerRing" in view)
+check("perspective projection with near clip", "clipDepth" in view and "p.x / p.z" in view)
+check("steel tubes lit only by the flood", "steelBody" in view and "steelSheen" in view and "steelLit" in view)
+check("steel shades what is behind it", "blendMode = .normal" in view)
+check("neon strip buckets", "TunnelBucket" in view)
+check("warm side-wall boxes", "BoxTrim" in view and "isWarm" in view and "cos(faceAngle)" in view)
+check("full-stage flood", "Path(CGRect(origin: .zero, size: size))" in view)
 check("hexagonal core", "drawCore" in view)
 check("additive glow", ".plusLighter" in view)
 check("cool and warm layers from the theme", "TunnelColors" in view and "ThemePalette" in view and "palette.sample" in view)
-check("stable per-ring pattern hash", "static func hash" in view)
+check("stable per-layer pattern hash", "static func hash" in view)
 
 # Rhythm sync: flight and roll on the beat grid (volume cruise before a
 # tempo), a bright ring per beat, lit/dark strobe held to the strobe cap.
@@ -76,7 +89,7 @@ check("drum reactivity scaled", "drumReactivity.scaled(by: beatReactivity)" in v
 
 # README describes the new look and its sync.
 tunnel_line = next((ln for ln in readme.splitlines() if "**Tunnel**" in ln), "")
-check("README names the cage look", "cage" in tunnel_line and "watermarked preview clip" in tunnel_line)
+check("README names the box-corridor look", "box" in tunnel_line and "watermarked preview clip" in tunnel_line)
 check("README drops the wobble description", "outlines wobbling" not in readme)
 
 # Truncation guard: balanced delimiters in the new view.
