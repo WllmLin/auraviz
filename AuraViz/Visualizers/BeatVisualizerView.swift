@@ -8,9 +8,13 @@ import SwiftUI
 /// Hits keep to the 3-per-second strobe cap like the other modes' flashes.
 ///
 /// Kicks add their own shake on top, snares brighten the color flood and hats
-/// add a fine jitter. At 0 beat reactivity the image holds still and only
-/// takes a faint volume-driven tint. Without an image the stage shows a dark
-/// wash of the theme colors, so the shake and color still read.
+/// add a fine jitter. Sustained bass — a drop's long sub notes, which barely
+/// register as transients — also drives the look directly: while the smoothed
+/// bass level stays high the image holds a trembling push-in and keeps the
+/// color flooded, instead of sitting still between hits. At 0 beat reactivity
+/// the image holds still and only takes a faint volume-driven tint. Without
+/// an image the stage shows a dark wash of the theme colors, so the shake and
+/// color still read.
 struct BeatVisualizerView: View {
     /// The background picture; nil until one is chosen.
     var image: CGImage?
@@ -26,6 +30,7 @@ struct BeatVisualizerView: View {
     /// Shared so every stage layer, in the preview and the output, shakes
     /// and recolors together, and a crossfade doesn't show two images.
     private static let hits = BeatHits()
+    private static let bass = BassFollower()
 
     var body: some View {
         // Near-black stops would turn the picture black, so they're skipped.
@@ -34,10 +39,12 @@ struct BeatVisualizerView: View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !isActive)) { timeline in
             let now = BeatClock.time(for: timeline.date)
             let hit = Self.hits.latest(in: beat)
+            let bassLevel = Self.bass.advance(to: now, target: isActive ? Double(beat.bassEnvelope(at: now)) : 0)
             let look = BeatLook(
                 now: now,
                 hit: hit,
                 beat: beat,
+                bassLevel: bassLevel,
                 volume: Double(volume),
                 beatReactivity: beatReactivity,
                 drums: drumReactivity.scaled(by: beatReactivity),
@@ -119,23 +126,51 @@ private final class BeatHits {
     }
 }
 
+/// Smoothed bass level for the drop drive: fast in when a drop lands, slow
+/// out, so the held color flood ripples between kicks instead of flashing at
+/// the beat rate (see `PerformanceState.strobeMinimumInterval`). A class so
+/// it can advance inside a `TimelineView` update without invalidating SwiftUI
+/// state; several layers advancing in the same frame see dt ≈ 0.
+private final class BassFollower {
+    private static let attackTime: TimeInterval = 0.05
+    private static let releaseTime: TimeInterval = 0.45
+
+    private var level = 0.0
+    private var lastTime: TimeInterval?
+
+    func advance(to now: TimeInterval, target raw: Double) -> Double {
+        defer { lastTime = now }
+        guard let lastTime else { return level }
+        let target = min(1, max(0, raw.isFinite ? raw : 0))
+        // Clamped so resuming after a pause continues instead of jumping.
+        let dt = min(0.1, max(0, now - lastTime))
+        let tau = target > level ? Self.attackTime : Self.releaseTime
+        level += (target - level) * (1 - exp(-dt / tau))
+        return level
+    }
+}
+
 /// How the image sits at one moment: its shake, twist and zoom, and how far
 /// it has turned which theme color.
 struct BeatLook {
     /// Most the shake moves the image, as a fraction of the stage's shorter side.
-    static let maximumShake = 0.035
-    /// Most the shake twists the image, in radians (about 1°).
-    static let maximumRotation = 0.017
+    static let maximumShake = 0.055
+    /// Most the shake twists the image, in radians (about 1.5°).
+    static let maximumRotation = 0.026
     /// Extra zoom on a full-strength beat, on top of what covers the shake.
-    static let maximumPunch = 0.04
+    static let maximumPunch = 0.08
     /// Opacity of the color flood at the peak of a beat.
     static let maximumTint = 0.85
     /// How fast the shake dies away and how fast it shudders.
-    static let shakeDecay: TimeInterval = 0.18
+    static let shakeDecay: TimeInterval = 0.24
     static let shakeFrequency = 11.0
     /// The color holds at full briefly, then fades back to the picture.
-    static let tintHold: TimeInterval = 0.06
-    static let tintDecay: TimeInterval = 0.32
+    static let tintHold: TimeInterval = 0.08
+    static let tintDecay: TimeInterval = 0.45
+    /// Smoothed bass below this counts as quiet, so breakdowns stay still.
+    static let bassGate = 0.15
+    /// Tremor amplitude at full sustained bass, in beat-shake units.
+    static let bassWeight = 0.65
 
     /// Shift as a fraction of the stage's shorter side.
     var offset = CGSize.zero
@@ -150,38 +185,54 @@ struct BeatLook {
     /// Which theme color the image turns.
     var colorIndex = 0
 
-    init(now: TimeInterval, hit: BeatHit, beat: BeatAnalysis, volume: Double, beatReactivity: Double, drums: DrumReactivity, isActive: Bool) {
+    init(now: TimeInterval, hit: BeatHit, beat: BeatAnalysis, bassLevel: Double, volume: Double, beatReactivity: Double, drums: DrumReactivity, isActive: Bool) {
         // At rest, the plain picture, while audio is stopped.
         guard isActive else { return }
         let reactivity = min(1, max(0, beatReactivity))
-        let strength = 0.45 + 0.55 * hit.strength
+        let strength = 0.3 + 0.7 * hit.strength
         let beatAge = max(0, now - hit.time)
         let beatShake = reactivity * strength * exp(-beatAge / Self.shakeDecay)
         let kickAge = beat.kick.hitAge(at: now)
-        let kickShake = 0.6 * drums.kick * beat.kick.pulse(at: now)
+        let kickShake = 0.85 * drums.kick * beat.kick.pulse(at: now)
         let hatJitter = drums.hat * beat.hat.pulse(at: now)
+
+        // Sustained bass: a gated, contrast-expanded read of the smoothed
+        // bass level. It holds a trembling push-in and keeps the color
+        // flooded for as long as a drop's sub lasts, between and beyond the
+        // transient hits above. The kick envelope feeds the tremor only —
+        // motion, not light — so rolling kicks still shake the picture
+        // while the smoothed level is steady.
+        let gatedBass = max(0, (min(1, max(0, bassLevel.isFinite ? bassLevel : 0)) - Self.bassGate) / (1 - Self.bassGate))
+        let bassOnly = pow(gatedBass, 1.35)
+        let drop = reactivity * bassOnly
+        let kickLevel = min(1, max(0, Double(beat.kick.envelope(at: now))))
+        let dropShake = Self.bassWeight * max(drop, 0.85 * drums.kick * pow(kickLevel, 1.2))
 
         // Before the first hit the age is infinite and cos(∞) is NaN, which
         // even a zero amplitude wouldn't cancel, so a spent shake is skipped.
         let still = (x: 0.0, y: 0.0, twist: 0.0)
         let a = beatShake > 1e-4 ? Self.shake(age: beatAge, seed: hit.index) : still
         let k = kickShake > 1e-4 ? Self.shake(age: kickAge, seed: beat.kick.hitCount &+ 7919) : still
+        // The tremor runs on frame time, re-aimed by each beat, so it keeps
+        // shuddering through a held sub note with no new transients.
+        let b = dropShake > 1e-4 ? Self.shake(age: now, seed: beat.beatCount &+ 31_337) : still
         let jitterX = 0.15 * hatJitter * (2 * beat.hat.scatter(0) - 1)
         let jitterY = 0.15 * hatJitter * (2 * beat.hat.scatter(1) - 1)
         offset = CGSize(
-            width: Self.maximumShake * (beatShake * a.x + kickShake * k.x + jitterX),
-            height: Self.maximumShake * (beatShake * a.y + kickShake * k.y + jitterY)
+            width: Self.maximumShake * (beatShake * a.x + kickShake * k.x + dropShake * b.x + jitterX),
+            height: Self.maximumShake * (beatShake * a.y + kickShake * k.y + dropShake * b.y + jitterY)
         )
-        rotation = Self.maximumRotation * (beatShake * a.twist + kickShake * k.twist)
-        shakeBound = beatShake + kickShake + 0.15 * hatJitter
-        punch = Self.maximumPunch * (beatShake + 0.5 * kickShake)
+        rotation = Self.maximumRotation * (beatShake * a.twist + kickShake * k.twist + dropShake * b.twist)
+        shakeBound = beatShake + kickShake + dropShake + 0.15 * hatJitter
+        punch = Self.maximumPunch * (beatShake + 0.5 * kickShake + 0.9 * drop)
 
         let envelope = beatAge < Self.tintHold ? 1 : exp(-(beatAge - Self.tintHold) / Self.tintDecay)
         let calmTint = 0.3 * min(1, max(0, volume))
         let beatTint = strength * envelope
-        tint = min(1, (1 - reactivity) * calmTint + reactivity * beatTint)
+        let reactiveTint = min(1, max(beatTint, bassOnly))
+        tint = min(1, (1 - reactivity) * calmTint + reactivity * reactiveTint)
         let snareFlash = drums.snare * beat.snare.pulse(at: now)
-        glow = min(0.6, 0.3 * tint + 0.35 * snareFlash)
+        glow = min(0.65, 0.35 * tint + 0.35 * snareFlash + 0.2 * drop)
         colorIndex = reactivity > 0 ? hit.index : 0
     }
 

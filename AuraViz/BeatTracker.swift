@@ -39,7 +39,7 @@ enum DrumInstrument: String, CaseIterable, Identifiable, Codable {
     /// overtones, stick and wires) and the hat's high sizzle.
     var band: ClosedRange<Double> {
         switch self {
-        case .kick: return 40...150
+        case .kick: return 20...150
         case .snare: return 250...5_000
         case .hat: return 6_000...16_000
         }
@@ -290,12 +290,14 @@ final class RateLimitedDrumPulse {
 final class BeatTracker {
     static let bassReleaseTime: TimeInterval = 0.12
 
-    // Onset detection
+    // Onset detection. The ratio and deviation bars sit low enough that
+    // kicks still fire once a drop has filled the history window with loud
+    // bass; the level gate keeps quiet-room noise from counting.
     private let energyHistoryDuration: TimeInterval = 1.0
-    private let thresholdDeviations: Float = 1.0
-    private let minimumEnergyRatio: Float = 1.4
-    private let minimumBassLevel: Float = 0.05
-    private let refractoryInterval: TimeInterval = 0.25
+    private let thresholdDeviations: Float = 0.75
+    private let minimumEnergyRatio: Float = 1.28
+    private let minimumBassLevel: Float = 0.03
+    private let refractoryInterval: TimeInterval = 0.2
     private let fluxScale: Float = 5
     // Short hops catch a kick while it is still entering the FFT window, so the
     // strength keeps tracking the rising energy for about one window length.
@@ -423,7 +425,7 @@ final class BeatTracker {
     // MARK: - Analysis
 
     /// - Parameters:
-    ///   - bassEnergy: Sum of squared FFT magnitudes in the ~40-150 Hz bins.
+    ///   - bassEnergy: Sum of squared FFT magnitudes in the ~20-150 Hz bins.
     ///   - bassLevel: The same band as a 0-1 display level.
     ///   - bands: Unsmoothed per-band levels for spectral flux.
     ///   - magnitudes: Unscaled FFT bin magnitudes, DC first, for the drum
@@ -860,7 +862,7 @@ final class BeatTracker {
 
     /// Measured against the energy history from before the onset.
     private func onsetStrength(forEnergy energy: Float) -> Float {
-        min(1, max(0.1, log2(energy / onsetBaselineEnergy) / 2))
+        min(1, max(0.1, log2(energy / onsetBaselineEnergy) / 1.5))
     }
 
     private func audioTime(
@@ -923,7 +925,7 @@ struct DrumOnsetDetector {
     private static let historyDuration: TimeInterval = 1.0
     // Holds `historyDuration` at ~94 analyses per second.
     private static let historyCapacity = 256
-    private static let medianRatio: Float = 4
+    private static let medianRatio: Float = 3.5
     /// A bin counts as rising above this power ratio (about 1 dB), unless
     /// it's still 60 dB under the program level: between the harmonics of a
     /// clean synth, rounding noise rises too.
@@ -962,7 +964,7 @@ struct DrumOnsetDetector {
     init(instrument: DrumInstrument) {
         self.instrument = instrument
         switch instrument {
-        case .kick: minimumOnset = 15
+        case .kick: minimumOnset = 8
         case .snare: minimumOnset = 0.04
         case .hat: minimumOnset = 3e-4
         }

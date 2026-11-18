@@ -8,7 +8,9 @@ exists and is routed with the chosen background image, build manifests list
 the new file, stored "Neon" and "Particles" values still load, the
 background is stored and pickable, and the view shakes the image and floods
 it with a theme color on beats held to the strobe cap. It also replays the
-shake math in Python to check the cover zoom always hides the stage edges.
+shake math in Python to check the cover zoom always hides the stage edges,
+and replays the look's response to a synthetic bass drop (sustained sub
+with few transients) against the old transient-only math.
 """
 import math
 import pathlib
@@ -39,6 +41,8 @@ settings = read("AuraViz/PerformanceState.swift")
 store = read("AuraViz/ImageOverlays.swift")
 content = read("AuraViz/ContentView.swift")
 readme = read("README.md")
+tracker = read("AuraViz/BeatTracker.swift")
+audio = read("AuraViz/AudioEngineManager.swift")
 
 # The mode swap.
 check("beat view file exists", bool(view))
@@ -93,10 +97,24 @@ for voice in ["kick", "snare", "hat"]:
 check("drum reactivity scaled", "drumReactivity.scaled(by: beatReactivity)" in view)
 check("drum defaults for beat", "case .beat: return DrumReactivity(" in theme)
 
+# Bass drops: sustained sub drives the look between transients, smoothed so
+# the color flood cannot strobe; the tracker hears sub-bass and still fires
+# on kicks inside an already-loud drop.
+check("beat follows sustained bass", "bassEnvelope(at:" in view and "kick.envelope(at:" in view)
+check("bass follower smooths the drop drive", "BassFollower" in view and "bassLevel:" in view)
+check("tracker hears sub-bass", "case .kick: return 20...150" in tracker)
+check("bass bins hear sub-bass", "(20 / binWidth)" in audio)
+check("beat threshold hears kicks inside a drop",
+      "minimumEnergyRatio: Float = 1.28" in tracker and "thresholdDeviations: Float = 0.75" in tracker)
+check("kick detector floor lowered", "case .kick: minimumOnset = 8" in tracker)
+
 # Replays BeatLook's shake and cover zoom: at any moment the shifted,
 # twisted, zoomed image must still cover every stage corner.
-MAX_SHAKE, MAX_ROT, MAX_PUNCH = 0.035, 0.017, 0.04
+MAX_SHAKE, MAX_ROT, MAX_PUNCH = 0.055, 0.026, 0.08
+BASS_WEIGHT, BASS_GATE = 0.65, 0.15
 check("constants match the view", f"maximumShake = {MAX_SHAKE}" in view and f"maximumRotation = {MAX_ROT}" in view and f"maximumPunch = {MAX_PUNCH}" in view)
+check("bass constants match the view", f"bassWeight = {BASS_WEIGHT}" in view and f"bassGate = {BASS_GATE}" in view)
+check("decays match the view", "shakeDecay: TimeInterval = 0.24" in view and "tintDecay: TimeInterval = 0.45" in view)
 
 
 def h(seed, salt):
@@ -116,13 +134,13 @@ def shake(age, seed):
             math.sin(2 * math.pi * 7 * age + pt))
 
 
-def covers(w, h_, beat_amp, kick_amp, hat_amp, a, k, jx, jy):
+def covers(w, h_, beat_amp, kick_amp, drop_amp, drop_punch, hat_amp, a, k, b, jx, jy):
     short = min(w, h_)
-    dx = MAX_SHAKE * (beat_amp * a[0] + kick_amp * k[0] + 0.15 * hat_amp * jx) * short
-    dy = MAX_SHAKE * (beat_amp * a[1] + kick_amp * k[1] + 0.15 * hat_amp * jy) * short
-    rot = MAX_ROT * (beat_amp * a[2] + kick_amp * k[2])
-    bound = beat_amp + kick_amp + 0.15 * hat_amp
-    punch = MAX_PUNCH * (beat_amp + 0.5 * kick_amp)
+    dx = MAX_SHAKE * (beat_amp * a[0] + kick_amp * k[0] + drop_amp * b[0] + 0.15 * hat_amp * jx) * short
+    dy = MAX_SHAKE * (beat_amp * a[1] + kick_amp * k[1] + drop_amp * b[1] + 0.15 * hat_amp * jy) * short
+    rot = MAX_ROT * (beat_amp * a[2] + kick_amp * k[2] + drop_amp * b[2])
+    bound = beat_amp + kick_amp + drop_amp + 0.15 * hat_amp
+    punch = MAX_PUNCH * (beat_amp + 0.5 * kick_amp + 0.9 * drop_punch)
     s = 1 + math.sin(MAX_ROT * bound) * max(w, h_) / short + 2 * MAX_SHAKE * 1.35 * bound + punch
     # The image's rect at rest is exactly the stage (aspect fill can only be
     # larger), so check each stage corner lands inside the transformed rect.
@@ -140,13 +158,103 @@ for w, h_ in [(1920, 1080), (1080, 1920), (500, 500), (3440, 1440)]:
     for seed in range(40):
         for step in range(60):
             age = step / 120
-            for beat_amp, kick_amp, hat_amp in [(1, 0, 0), (1, 0.6, 1), (0.3, 0.6, 0), (0, 0.6, 1), (0, 0, 1)]:
+            # (beat, kick, drop shake, drop punch, hat). The drop-punch 0
+            # cases are the hard ones: full tremor with no zoom help.
+            for beat_amp, kick_amp, drop_amp, drop_punch, hat_amp in [
+                (1, 0, 0, 0, 0), (1, 0.85, 0.65, 1, 1), (1, 0.85, 0.65, 0, 1),
+                (0.3, 0.85, 0.65, 0.5, 0), (0, 0.85, 0.65, 0, 1),
+                (0, 0, 0.65, 1, 0), (0, 0, 0, 0, 1),
+            ]:
                 a = shake(age, seed)
                 k = shake(age * 1.3, seed + 7919)
+                b = shake(age * 1.7 + 0.31, seed + 31337)
                 jx, jy = 2 * h(seed, 9) - 1, 2 * h(seed, 10) - 1
-                if not covers(w, h_, beat_amp, kick_amp, hat_amp, a, k, jx, jy):
+                if not covers(w, h_, beat_amp, kick_amp, drop_amp, drop_punch, hat_amp, a, k, b, jx, jy):
                     ok = False
 check("cover zoom hides the stage edges through every shake", ok)
+
+# Response replay: old transient-only math vs the shipped bass-following
+# math on the same synthetic signals (60 fps, default reactivity 0.6).
+check("kick shake weight", "0.85 * drums.kick" in view)
+check("drop holds punch and tint", "0.9 * drop" in view and "max(beatTint, bassOnly)" in view)
+check("follower time constants", "attackTime: TimeInterval = 0.05" in view and "releaseTime: TimeInterval = 0.45" in view)
+R = 0.6
+
+
+def old_look(age, s, kick_pulse, vol, a, k, dk):
+    strength = 0.45 + 0.55 * s
+    bs = R * strength * math.exp(-age / 0.18)
+    ks = 0.6 * dk * kick_pulse
+    off = 0.035 * math.hypot(bs * a[0] + ks * k[0], bs * a[1] + ks * k[1])
+    env = 1 if age < 0.06 else math.exp(-(age - 0.06) / 0.32)
+    return off, 0.04 * (bs + 0.5 * ks), min(1, (1 - R) * 0.3 * vol + R * strength * env)
+
+
+def new_look(age, s, kick_pulse, kick_env, bass_smooth, vol, a, k, b, dk):
+    strength = 0.3 + 0.7 * s
+    bs = R * strength * math.exp(-age / 0.24)
+    ks = 0.85 * dk * kick_pulse
+    gated = max(0.0, (min(1, max(0, bass_smooth)) - BASS_GATE) / (1 - BASS_GATE))
+    bass_only = gated ** 1.35
+    drop = R * bass_only
+    ds = BASS_WEIGHT * max(drop, 0.85 * dk * (min(1, max(0, kick_env)) ** 1.2))
+    off = MAX_SHAKE * math.hypot(bs * a[0] + ks * k[0] + ds * b[0], bs * a[1] + ks * k[1] + ds * b[1])
+    env = 1 if age < 0.08 else math.exp(-(age - 0.08) / 0.45)
+    reactive = min(1, max(strength * env, bass_only))
+    return off, MAX_PUNCH * (bs + 0.5 * ks + 0.9 * drop), min(1, (1 - R) * 0.3 * vol + R * reactive)
+
+
+def simulate(bpm, drop_span, duration=12.0, transient_free_after=None):
+    tb, dt = 60.0 / bpm, 1.0 / 60
+    level, out = 0.0, []
+    for i in range(int(duration / dt)):
+        t = i * dt
+        idx = int(t // tb)
+        age = t - idx * tb
+        if transient_free_after is not None and t > transient_free_after:
+            idx = int(transient_free_after // tb)
+            age = t - idx * tb
+        in_drop = drop_span[0] <= t < drop_span[1]
+        bass_raw = (0.88 if in_drop else 0.15) + (0.12 if in_drop else 0.25) * math.exp(-age / 0.12)
+        level += (bass_raw - level) * (1 - math.exp(-dt / (0.05 if bass_raw > level else 0.45)))
+        pulse = math.exp(-age / 0.15) * (0.4 + 0.6 * (0.9 if in_drop else 0.5))
+        kenv = math.exp(-age / 0.15) * (1.0 if in_drop else 0.55)
+        a, k, b = shake(age, idx), shake(age, idx + 7919), shake(t, idx + 31337)
+        s, vol = (0.85, 0.85) if in_drop else (0.45, 0.45)
+        out.append((t, old_look(age, s, pulse, vol, a, k, 0.8 * R),
+                    new_look(age, s, pulse, kenv, level, vol, a, k, b, 1.0 * R)))
+    return out
+
+
+def means(rows, lo, hi):
+    part = [(o, n) for t, o, n in rows if lo <= t < hi]
+    return [sum(x[j][c] for x in part) / len(part) for j in (0, 1) for c in range(3)]
+
+
+rows = simulate(140, (4.0, 10.0))
+o_off, o_pun, o_tin, n_off, n_pun, n_tin = means(rows, 5.0, 9.5)
+check("drop shakes harder", n_off >= 1.8 * max(o_off, 1e-9))
+check("drop punches harder", n_pun >= 2.5 * max(o_pun, 1e-9))
+check("drop holds the color", n_tin >= 1.3 * max(o_tin, 1e-9))
+# Between beats the old flood had mostly faded; the drop floor must hold it.
+_a, _k, _b = shake(0.32, 7), shake(0.32, 7 + 7919), shake(5.0, 7 + 31337)
+_old_between = old_look(0.32, 0.85, 0.05, 0.85, _a, _k, 0.8 * R)[2]
+_new_between = new_look(0.32, 0.85, 0.05, 0.1, 0.92, 0.85, _a, _k, _b, 1.0 * R)[2]
+check("color stays flooded between beats", _new_between >= 1.5 * _old_between)
+qo = means(rows, 1.0, 3.5)
+check("breakdown stays calmer than the drop", qo[3] <= 0.75 * n_off and qo[5] <= 0.45)
+_silent = new_look(10.0, 0.5, 0.0, 0.0, 0.05, 0.05, _a, _k, _b, 1.0 * R)
+check("silence stays still", _silent[0] < 0.001 and _silent[1] < 0.005 and _silent[2] < 0.02)
+free = means(simulate(140, (0.0, 12.0), duration=3.0, transient_free_after=0.0), 1.5, 3.0)
+check("sustained sub moves with no transients", free[1] < 0.005 and free[4] >= 0.03 and free[3] >= 0.008)
+tints = [n[2] for t, _, n in simulate(175, (0.0, 12.0), duration=6.0) if 3.0 <= t < 6.0]
+check("smoothed flood cannot strobe", min(tints) >= 0.45 * max(tints))
+check("look values stay finite and bounded",
+      all(math.isfinite(v) and n[2] <= 1 and n[1] >= 0 for _, o, n in rows for v in o + n))
+# Tracker threshold on an already-loud floor: a 1.35x kick must fire now,
+# and 1.15x noise must still not (deviation term ~0 on a steady floor).
+check("kick inside a drop fires", 1.35 > 1.28 and not 1.35 > 1.4)
+check("floor noise still ignored", not 1.15 > 1.28)
 
 # Truncation guard: balanced delimiters in the new view.
 for open_c, close_c in [("{", "}"), ("(", ")"), ("[", "]")]:

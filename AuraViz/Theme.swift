@@ -46,7 +46,7 @@ enum VisualMode: String, CaseIterable, Identifiable, Codable {
         case .waves: return DrumReactivity(kick: 0.8, snare: 0.6, hat: 0.8)
         case .y2k: return DrumReactivity(kick: 0.7, snare: 0.7, hat: 0.8)
         case .tunnel: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.6)
-        case .beat: return DrumReactivity(kick: 0.8, snare: 0.6, hat: 0.4)
+        case .beat: return DrumReactivity(kick: 1, snare: 0.7, hat: 0.5)
         case .kaleidoscope: return DrumReactivity(kick: 1, snare: 0.8, hat: 0.7)
         }
     }

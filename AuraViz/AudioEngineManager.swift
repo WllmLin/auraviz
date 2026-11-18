@@ -1357,7 +1357,7 @@ final class AudioEngineManager: NSObject, ObservableObject {
         }
         lowestDominantBin = max(1, Int(minFrequency / binWidth))
         highestDominantBin = min(halfN - 1, Int(maxFrequency / binWidth))
-        lowestBassBin = min(halfN - 1, max(1, Int((40 / binWidth).rounded())))
+        lowestBassBin = min(halfN - 1, max(1, Int((20 / binWidth).rounded())))
         highestBassBin = min(halfN - 1, max(lowestBassBin, Int((150 / binWidth).rounded())))
         cachedBandSampleRate = sampleRate
     }
