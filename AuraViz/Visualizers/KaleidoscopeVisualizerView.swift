@@ -368,7 +368,7 @@ private final class KaleidoscopeSystem {
 }
 
 /// The theme's gradient as RGB for interpolation, skipping near-black stops
-/// that would vanish on the dark stage. Shared by the Kaleidoscope and Neon modes.
+/// that would vanish on the dark stage. Shared by the Kaleidoscope and Tunnel modes.
 struct ThemePalette {
     struct RGB {
         var r: Double

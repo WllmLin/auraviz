@@ -61,6 +61,7 @@ private struct PerformanceMenu: View {
         ))
         .keyboardShortcut("i", modifiers: [])
         Button("Add Overlay Image…") { imageOverlays.chooseImages() }
+        Button("Choose Beat Background…") { imageOverlays.chooseBeatBackground() }
         Divider()
         Toggle("Blackout", isOn: Binding(
             get: { performance.isBlackedOut },
@@ -119,7 +120,7 @@ private struct PerformanceMenu: View {
 
 /// The cheat sheet's rows, in menu order.
 private let performanceShortcuts: [(keys: String, action: String)] = [
-    ("1 – 6", "Circle / Waves / Bars / Tunnel / Neon / Kaleidoscope"),
+    ("1 – 6", "Circle / Waves / Bars / Tunnel / Beat / Kaleidoscope"),
     ("T", "Next theme"),
     ("⇧T", "Previous theme"),
     ("L", "Lyrics overlay on / off"),

@@ -102,6 +102,13 @@ enum ImageOverlayBlend: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// Beat mode's background picture: the file name it was chosen from and its
+/// stored copy in the overlays folder.
+struct BeatBackground: Codable, Equatable {
+    var name: String
+    var fileName: String
+}
+
 /// A visible overlay with its decoded image, as the stage draws it.
 struct StageImageOverlay: Identifiable {
     var overlay: ImageOverlay
@@ -136,6 +143,23 @@ final class ImageOverlayStore: ObservableObject {
     @Published private(set) var unreadable: Set<UUID> = []
     /// Why the last import skipped files, until the next import.
     @Published private(set) var importError: String?
+    /// Beat mode's background picture, stored with the overlays.
+    @Published private(set) var beatBackground: BeatBackground? {
+        didSet {
+            let defaults = UserDefaults.standard
+            if let beatBackground, let data = try? JSONEncoder().encode(beatBackground) {
+                defaults.set(data, forKey: SettingsKey.beatBackground)
+            } else {
+                defaults.removeObject(forKey: SettingsKey.beatBackground)
+            }
+        }
+    }
+    /// The decoded background; nil while loading, if unreadable or unset.
+    @Published private(set) var beatBackgroundImage: CGImage?
+    /// The stored background file is gone or can't be decoded.
+    @Published private(set) var isBeatBackgroundUnreadable = false
+    /// Why the last background pick failed, until the next pick.
+    @Published private(set) var beatBackgroundError: String?
 
     private let directory: URL?
 
@@ -157,7 +181,12 @@ final class ImageOverlayStore: ObservableObject {
             self.overlays = overlays
         }
         isEnabled = defaults.bool(forKey: SettingsKey.imageOverlaysEnabled)
+        if let data = defaults.data(forKey: SettingsKey.beatBackground),
+           let background = try? JSONDecoder().decode(BeatBackground.self, from: data) {
+            beatBackground = background
+        }
         loadStoredImages()
+        loadBeatBackground()
     }
 
     /// The visible overlays that have loaded, bottom to top. Listed while
@@ -212,6 +241,82 @@ final class ImageOverlayStore: ObservableObject {
             }
             if !skipped.isEmpty {
                 self?.importError = "Couldn't read \(skipped.joined(separator: ", ")) as an image."
+            }
+        }
+    }
+
+    /// Asks for Beat mode's background picture.
+    func chooseBeatBackground() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose the picture Beat mode shakes and recolors on every beat"
+        panel.prompt = "Choose"
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.setBeatBackground(url)
+        }
+    }
+
+    /// Copies the image in as Beat mode's background, decoding it off the
+    /// main thread, and drops the previous background's copy. An unreadable
+    /// file keeps the current background and sets `beatBackgroundError`.
+    func setBeatBackground(_ url: URL) {
+        beatBackgroundError = nil
+        guard let directory else {
+            beatBackgroundError = "Couldn't create a folder for images in Application Support."
+            return
+        }
+        Task { @MainActor [weak self] in
+            do {
+                let (fileName, image) = try await Task.detached(priority: .userInitiated) {
+                    try Self.importImage(at: url, into: directory)
+                }.value
+                guard let self else { return }
+                self.removeStoredBeatBackground()
+                self.beatBackground = BeatBackground(name: url.lastPathComponent, fileName: fileName)
+                self.beatBackgroundImage = image
+                self.isBeatBackgroundUnreadable = false
+            } catch {
+                Self.logger.error("Couldn't set \(url.lastPathComponent) as the beat background: \(error.localizedDescription)")
+                self?.beatBackgroundError = "Couldn't read \(url.lastPathComponent) as an image."
+            }
+        }
+    }
+
+    /// Clears Beat mode's background and removes its stored copy.
+    func clearBeatBackground() {
+        removeStoredBeatBackground()
+        beatBackground = nil
+        beatBackgroundImage = nil
+        isBeatBackgroundUnreadable = false
+        beatBackgroundError = nil
+    }
+
+    private func removeStoredBeatBackground() {
+        guard let beatBackground, let directory else { return }
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent(beatBackground.fileName))
+    }
+
+    private func loadBeatBackground() {
+        guard let background = beatBackground else { return }
+        guard let directory else {
+            isBeatBackgroundUnreadable = true
+            return
+        }
+        let url = directory.appendingPathComponent(background.fileName)
+        Task { @MainActor [weak self] in
+            let image = await Task.detached(priority: .userInitiated) {
+                Self.decodeImage(at: url)
+            }.value
+            // A new pick may have landed while this one decoded.
+            guard let self, self.beatBackground == background else { return }
+            if let image {
+                self.beatBackgroundImage = image
+            } else {
+                Self.logger.error("Couldn't load the beat background \(url.lastPathComponent)")
+                self.isBeatBackgroundUnreadable = true
             }
         }
     }

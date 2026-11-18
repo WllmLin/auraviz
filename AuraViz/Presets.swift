@@ -21,6 +21,7 @@ enum SettingsKey {
     static let overlayFont = "overlayFont"
     static let imageOverlays = "imageOverlays"
     static let imageOverlaysEnabled = "imageOverlaysEnabled"
+    static let beatBackground = "beatBackground"
     static let outputBrightness = "outputBrightness"
 }
 
@@ -150,8 +151,8 @@ final class PresetStore: ObservableObject {
         ),
         Preset(
             id: UUID(uuidString: "6A1F3C52-0B7E-4C1D-9A55-1C0FFEE00005")!,
-            name: "Neon Cage",
-            mode: .neon,
+            name: "Beat Drop",
+            mode: .beat,
             theme: .cyberpunk,
             circleFramesPerSecond: 60,
             sensitivity: 1.0,

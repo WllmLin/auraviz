@@ -356,10 +356,15 @@ struct ContentView: View {
             // Clicking the stage finishes editing the lyrics.
             .contentShape(Rectangle())
             .onTapGesture { isLyricsFieldFocused = false }
-            // Image files dropped on the stage become overlay images.
+            // Image files dropped on the stage become overlay images, or
+            // Beat mode's background while Beat is showing.
             .dropDestination(for: URL.self) { urls, _ in
                 let files = urls.filter(\.isFileURL)
-                imageOverlays.add(files)
+                if isBeatModeSelected, let file = files.first {
+                    imageOverlays.setBeatBackground(file)
+                } else {
+                    imageOverlays.add(files)
+                }
                 return !files.isEmpty
             } isTargeted: { isDropTargeted = $0 }
             .overlay {
@@ -367,7 +372,7 @@ struct ContentView: View {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(performance.theme.gradient.first!, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
                         .overlay(
-                            Label("Drop to add as overlay images", systemImage: "photo.on.rectangle")
+                            Label(isBeatModeSelected ? "Drop to set the Beat background" : "Drop to add as overlay images", systemImage: isBeatModeSelected ? "photo" : "photo.on.rectangle")
                                 .font(.system(size: 12, weight: .bold, design: .rounded))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 12).padding(.vertical, 7)
@@ -686,6 +691,10 @@ struct ContentView: View {
 
             outputDimmerControl
 
+            if isBeatModeSelected {
+                beatBackgroundControl
+            }
+
             lyricsControl
 
             imageOverlayControl
@@ -835,6 +844,73 @@ struct ContentView: View {
                 .onSubmit { isLyricsFieldFocused = false }
                 .onExitCommand { isLyricsFieldFocused = false }
                 .help("Return or Esc finishes editing. Performance shortcuts are off while you type.")
+        }
+    }
+
+    /// Beat mode is showing, or queued to show on the next beat.
+    private var isBeatModeSelected: Bool {
+        performance.mode == .beat || performance.targetLook.mode == .beat
+    }
+
+    /// Beat mode's background picture: a thumbnail, and buttons to pick or
+    /// clear it.
+    private var beatBackgroundControl: some View {
+        HStack(spacing: 10) {
+            Label("Beat Background", systemImage: "photo")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            if let image = imageOverlays.beatBackgroundImage {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 36, height: 24)
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .stroke(.white.opacity(0.18), lineWidth: 1)
+                    )
+                    .accessibilityHidden(true)
+            }
+            Button {
+                imageOverlays.chooseBeatBackground()
+            } label: {
+                Label(imageOverlays.beatBackground == nil ? "Choose Image…" : "Replace…", systemImage: "photo.badge.plus")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("The picture Beat mode fills the stage with; it shakes and turns a theme color on every beat. You can also drop an image file on the preview.")
+            if imageOverlays.beatBackground != nil {
+                Button("Clear") { imageOverlays.clearBeatBackground() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Remove the background picture")
+            }
+            if let background = imageOverlays.beatBackground {
+                Text(imageOverlays.isBeatBackgroundUnreadable ? "\(background.name) couldn't be loaded" : background.name)
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(imageOverlays.isBeatBackgroundUnreadable ? .orange : .white.opacity(0.6))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                Text("Pick a photo or artwork; it shakes and turns the theme's colors on every beat.")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.45))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if let error = imageOverlays.beatBackgroundError {
+                HStack(spacing: 5) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(error)
+                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.72))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .help(error)
+            }
         }
     }
 
