@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Beat mode: the stage is just the chosen background image, filling the
-/// screen. Each beat shakes the image, a sharp damped jolt in a new
-/// direction with a small twist and zoom punch. It also floods the image
+/// screen — either keeping its proportions (cropped to cover) or stretched to
+/// the stage's exact shape, per `fit`. Each beat shakes the image, a sharp
+/// damped jolt in a new direction with a small twist and zoom punch. It also floods the image
 /// with the next of the theme's colors, which keeps the picture's light and
 /// dark but takes the color's hue, then fades back to the original picture.
 /// Hits keep to the 3-per-second strobe cap like the other modes' flashes.
@@ -18,6 +19,8 @@ import SwiftUI
 struct BeatVisualizerView: View {
     /// The background picture; nil until one is chosen.
     var image: CGImage?
+    /// Keep the picture's proportions (cropping the overhang) or stretch it.
+    var fit: BeatBackgroundFit = .fill
     var volume: CGFloat
     var theme: ColorTheme
     var isActive: Bool = true
@@ -81,16 +84,26 @@ struct BeatVisualizerView: View {
         .accessibilityHidden(true)
     }
 
-    /// The image filling the stage (cropped to cover it), or a dark theme
-    /// wash until one is chosen.
+    /// The image filling the stage, or a dark theme wash until one is chosen.
+    /// Either way its rect at rest is at least the stage, so the cover zoom
+    /// hides the edges through the shake.
     @ViewBuilder
     private func picture(size: CGSize, backdrop: [Color]) -> some View {
         if let image {
-            Image(decorative: image, scale: 1)
+            let resizable = Image(decorative: image, scale: 1)
                 .resizable()
                 .interpolation(.high)
-                .aspectRatio(contentMode: .fill)
-                .frame(width: size.width, height: size.height)
+            switch fit {
+            case .fill:
+                // Keeps the proportions; the overhang is clipped by the stage.
+                resizable
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size.width, height: size.height)
+            case .stretch:
+                // Exactly the stage's shape, so nothing is cropped.
+                resizable
+                    .frame(width: size.width, height: size.height)
+            }
         } else {
             LinearGradient(colors: backdrop.isEmpty ? [.gray] : backdrop, startPoint: .topLeading, endPoint: .bottomTrailing)
                 .opacity(0.35)

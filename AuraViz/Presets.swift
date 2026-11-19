@@ -22,6 +22,7 @@ enum SettingsKey {
     static let imageOverlays = "imageOverlays"
     static let imageOverlaysEnabled = "imageOverlaysEnabled"
     static let beatBackground = "beatBackground"
+    static let beatBackgroundFit = "beatBackgroundFit"
     static let outputBrightness = "outputBrightness"
 }
 

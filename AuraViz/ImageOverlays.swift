@@ -109,6 +109,23 @@ struct BeatBackground: Codable, Equatable {
     var fileName: String
 }
 
+/// How Beat mode's picture fills the stage. Both cover it edge to edge.
+enum BeatBackgroundFit: String, CaseIterable, Identifiable, Codable {
+    /// Keeps the picture's proportions, cropping whatever overhangs the stage.
+    case fill = "Keep Ratio"
+    /// Squeezes or widens the picture to the stage's exact shape; nothing is cropped.
+    case stretch = "Stretch"
+
+    var id: String { rawValue }
+
+    var help: String {
+        switch self {
+        case .fill: return "Fill the screen keeping the picture's proportions; edges that overhang are cropped"
+        case .stretch: return "Stretch the picture to the screen's exact shape; nothing is cropped, but it may look squashed"
+        }
+    }
+}
+
 /// A visible overlay with its decoded image, as the stage draws it.
 struct StageImageOverlay: Identifiable {
     var overlay: ImageOverlay
@@ -160,6 +177,10 @@ final class ImageOverlayStore: ObservableObject {
     @Published private(set) var isBeatBackgroundUnreadable = false
     /// Why the last background pick failed, until the next pick.
     @Published private(set) var beatBackgroundError: String?
+    /// Whether the background keeps its proportions (cropped) or stretches to the stage.
+    @Published var beatBackgroundFit: BeatBackgroundFit = .fill {
+        didSet { UserDefaults.standard.set(beatBackgroundFit.rawValue, forKey: SettingsKey.beatBackgroundFit) }
+    }
 
     private let directory: URL?
 
@@ -184,6 +205,10 @@ final class ImageOverlayStore: ObservableObject {
         if let data = defaults.data(forKey: SettingsKey.beatBackground),
            let background = try? JSONDecoder().decode(BeatBackground.self, from: data) {
             beatBackground = background
+        }
+        if let raw = defaults.string(forKey: SettingsKey.beatBackgroundFit),
+           let fit = BeatBackgroundFit(rawValue: raw) {
+            beatBackgroundFit = fit
         }
         loadStoredImages()
         loadBeatBackground()

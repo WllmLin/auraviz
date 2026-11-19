@@ -62,6 +62,11 @@ private struct PerformanceMenu: View {
         .keyboardShortcut("i", modifiers: [])
         Button("Add Overlay Image…") { imageOverlays.chooseImages() }
         Button("Choose Beat Background…") { imageOverlays.chooseBeatBackground() }
+        Picker("Beat Background Fit", selection: $imageOverlays.beatBackgroundFit) {
+            ForEach(BeatBackgroundFit.allCases) { fit in
+                Text(fit.rawValue).tag(fit)
+            }
+        }
         Divider()
         Toggle("Blackout", isOn: Binding(
             get: { performance.isBlackedOut },

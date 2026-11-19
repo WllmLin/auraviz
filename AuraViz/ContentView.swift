@@ -852,8 +852,8 @@ struct ContentView: View {
         performance.mode == .beat || performance.targetLook.mode == .beat
     }
 
-    /// Beat mode's background picture: a thumbnail, and buttons to pick or
-    /// clear it.
+    /// Beat mode's background picture: a thumbnail, buttons to pick or clear
+    /// it, and whether it keeps its proportions or stretches to the stage.
     private var beatBackgroundControl: some View {
         HStack(spacing: 10) {
             Label("Beat Background", systemImage: "photo")
@@ -885,6 +885,16 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Remove the background picture")
+                Picker("Fit", selection: $imageOverlays.beatBackgroundFit) {
+                    ForEach(BeatBackgroundFit.allCases) { fit in
+                        Text(fit.rawValue).tag(fit).help(fit.help)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .fixedSize()
+                .help("Fill the screen keeping the picture's proportions (cropping the overhang), or stretch it to the screen's exact shape")
             }
             if let background = imageOverlays.beatBackground {
                 Text(imageOverlays.isBeatBackgroundUnreadable ? "\(background.name) couldn't be loaded" : background.name)

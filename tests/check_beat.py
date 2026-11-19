@@ -6,7 +6,8 @@ Needs only Python 3 — no Xcode, no macOS tools — so it runs anywhere.
 It pins the shipped contract: the Neon view/mode is gone, the Beat view
 exists and is routed with the chosen background image, build manifests list
 the new file, stored "Neon" and "Particles" values still load, the
-background is stored and pickable, and the view shakes the image and floods
+background and its fit (keep ratio or stretch) are stored and pickable,
+and the view shakes the image and floods
 it with a theme color on beats held to the strobe cap. It also replays the
 shake math in Python to check the cover zoom always hides the stage edges,
 and replays the look's response to a synthetic bass drop (sustained sub
@@ -84,6 +85,22 @@ check("menu command to pick the background", "chooseBeatBackground()" in command
 
 # The look: image fills, shakes and turns a theme color on beats.
 check("image fills the stage", ".aspectRatio(contentMode: .fill)" in view)
+
+# Fit: keep the picture's ratio (cropped to cover) or stretch it to the stage.
+check("fit enum has keep-ratio and stretch",
+      "enum BeatBackgroundFit" in store and 'case fill = "Keep Ratio"' in store and 'case stretch = "Stretch"' in store)
+check("view takes the fit", "var fit: BeatBackgroundFit = .fill" in view)
+_fill = view[view.find("case .fill:"):view.find("case .stretch:")]
+_stretch = view[view.find("case .stretch:"):view.find("} else {", view.find("case .stretch:"))]
+check("keep ratio fills with aspect fill", ".aspectRatio(contentMode: .fill)" in _fill and ".frame(width: size.width, height: size.height)" in _fill)
+check("stretch drops the aspect ratio but fills the frame",
+      bool(_stretch) and "aspectRatio" not in _stretch and ".frame(width: size.width, height: size.height)" in _stretch)
+check("fit stored in settings", 'static let beatBackgroundFit = "beatBackgroundFit"' in presets
+      and "forKey: SettingsKey.beatBackgroundFit" in store and "BeatBackgroundFit(rawValue: raw)" in store)
+check("stage routes the fit", "fit: beatBackgroundFit" in stage and "beatBackgroundFit: imageOverlays.beatBackgroundFit" in stage)
+check("controls pick the fit", "$imageOverlays.beatBackgroundFit" in content)
+check("menu picks the fit", "$imageOverlays.beatBackgroundFit" in commands)
+check("README names the fit options", "**Keep Ratio**" in readme and "**Stretch**" in readme)
 check("theme colors drive the flood", "theme.colors(brighterThan:" in view and ".blendMode(.color)" in view)
 check("tint stays inside the stage", ".compositingGroup()" in view and ".clipped()" in view)
 check("shake moves, twists and zooms", ".offset(" in view and ".rotationEffect(" in view and ".scaleEffect(look.coverScale" in view)

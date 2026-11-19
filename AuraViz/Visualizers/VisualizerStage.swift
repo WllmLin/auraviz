@@ -18,6 +18,8 @@ struct VisualizerStage: View {
     var isShowingImages = false
     /// Beat mode's background picture; nil until one is chosen.
     var beatBackground: CGImage? = nil
+    /// Whether that picture keeps its proportions or stretches to the stage.
+    var beatBackgroundFit: BeatBackgroundFit = .fill
 
     var body: some View {
         ZStack {
@@ -62,7 +64,7 @@ struct VisualizerStage: View {
         case .tunnel:
             TunnelVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: theme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity, drumReactivity: drums)
         case .beat:
-            BeatVisualizerView(image: beatBackground, volume: audio.volume, theme: theme, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity, drumReactivity: drums)
+            BeatVisualizerView(image: beatBackground, fit: beatBackgroundFit, volume: audio.volume, theme: theme, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity, drumReactivity: drums)
         case .kaleidoscope:
             KaleidoscopeVisualizerView(spectrum: audio.spectrum, volume: audio.volume, theme: theme, sensitivity: audio.sensitivity, isActive: audio.isRunning, beat: audio.beat, beatReactivity: audio.beatReactivity, drumReactivity: drums)
         }
@@ -218,7 +220,7 @@ struct PerformanceStage: View {
             let effect = StageLayerEffect(handoff: handoff, progress: progress, isIncoming: isIncoming)
             // Both layers show the current lyrics and images, so a
             // transition only recolors the lyrics.
-            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics, lyricsFont: performance.overlayFont, images: imageOverlays.stageOverlays, isShowingImages: imageOverlays.isEnabled, beatBackground: imageOverlays.beatBackgroundImage)
+            VisualizerStage(audio: audio, mode: look.mode, theme: look.theme, framesPerSecond: look.framesPerSecond, lyrics: performance.stageLyrics, lyricsFont: performance.overlayFont, images: imageOverlays.stageOverlays, isShowingImages: imageOverlays.isEnabled, beatBackground: imageOverlays.beatBackgroundImage, beatBackgroundFit: imageOverlays.beatBackgroundFit)
                 .scaleEffect(effect.scale)
                 .visualEffect { content, proxy in
                     content.offset(x: effect.offset * proxy.size.width)
