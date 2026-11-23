@@ -21,6 +21,9 @@ final class PerformanceState: ObservableObject {
     /// The output dimmer's travel. Never down to black; that's the blackout.
     static let outputBrightnessRange = 0.2...1.0
     static let defaultOutputBrightness = 1.0
+    /// The film grain's travel; 0 turns the finish off.
+    static let filmGrainRange = 0.0...1.0
+    static let defaultFilmGrain = 0.5
 
     /// Set directly, these cut. Mode switches and preset recalls go through
     /// `show(_:clock:)` to use the chosen transition and quantize.
@@ -61,6 +64,11 @@ final class PerformanceState: ObservableObject {
     /// that's too bright. 1 is full brightness.
     @Published var outputBrightness = PerformanceState.defaultOutputBrightness {
         didSet { UserDefaults.standard.set(outputBrightness, forKey: SettingsKey.outputBrightness) }
+    }
+    /// Strength of the monochrome film grain and finish laid over every mode,
+    /// preview and output. 0 turns it off.
+    @Published var filmGrain = PerformanceState.defaultFilmGrain {
+        didSet { UserDefaults.standard.set(filmGrain, forKey: SettingsKey.filmGrain) }
     }
     /// `BeatClock.now` of the most recent strobe flash.
     @Published private(set) var strobeFlashTime: TimeInterval = -.infinity
@@ -156,6 +164,7 @@ final class PerformanceState: ObservableObject {
             self.overlayFont = overlayFont
         }
         outputBrightness = defaults.double(forKey: SettingsKey.outputBrightness, in: Self.outputBrightnessRange) ?? outputBrightness
+        filmGrain = defaults.double(forKey: SettingsKey.filmGrain, in: Self.filmGrainRange) ?? filmGrain
     }
 
     func cycleTheme(by offset: Int) {

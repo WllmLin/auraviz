@@ -367,6 +367,12 @@ struct StageEffectsOverlay: View {
             AmbientLoop(isActive: performance.isVibeKilled)
                 .opacity(performance.isVibeKilled ? 1 : 0)
                 .animation(.easeInOut(duration: PerformanceState.vibeKillFadeDuration), value: performance.isVibeKilled)
+            // Over every mode and the vibe kill, under the strobe so its
+            // flashes stay clean white, and under the dimmer and blackout so
+            // they take the grain down with the picture.
+            if performance.filmGrain > 0 {
+                FilmGrainOverlay(amount: performance.filmGrain)
+            }
             Color.white
                 .keyframeAnimator(initialValue: 0.0, trigger: performance.strobeFlashTime) { content, opacity in
                     content.opacity(opacity)
@@ -432,6 +438,180 @@ private struct AmbientLoop: View {
             Path(ellipseIn: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)),
             with: .radialGradient(gradient, center: center, startRadius: 0, endRadius: r)
         )
+    }
+}
+
+/// A monochrome film finish over the whole stage: animated grain that
+/// re-rolls 24 times a second like projected film, a faint lift in the
+/// blacks where the grain lives on the film base, and a soft vignette.
+/// `amount` (0...1) scales all three.
+///
+/// The grain is a handful of pre-rendered gray tiles, picked and shifted per
+/// frame from the clock, so a frame costs two tiled fills and the preview and
+/// output show the same grain.
+struct FilmGrainOverlay: View {
+    var amount: Double
+
+    /// Film's frame rate: the grain changes on every frame.
+    static let grainFrameRate = 24.0
+    /// Overlay-blended grain at full amount; overlay leaves pure black alone.
+    static let midtoneOpacity = 0.7
+    /// Screen-blended grain at full amount, so the blacks carry grain too.
+    /// Small, since it also lifts them (by about half this).
+    static let shadowOpacity = 0.07
+    /// Corner darkening at full amount.
+    static let vignetteOpacity = 0.45
+
+    var body: some View {
+        let amount = min(1, max(0, amount))
+        ZStack {
+            TimelineView(.animation(minimumInterval: 1.0 / Self.grainFrameRate)) { timeline in
+                let frame = Int((BeatClock.time(for: timeline.date) * Self.grainFrameRate).rounded(.down))
+                ZStack {
+                    grain(frame: frame)
+                        .opacity(Self.midtoneOpacity * amount)
+                        .blendMode(.overlay)
+                    // A different tile from the midtone pass, so the two
+                    // don't just stack into a stronger copy.
+                    grain(frame: frame &+ 7919)
+                        .opacity(Self.shadowOpacity * amount)
+                        .blendMode(.screen)
+                }
+            }
+            Canvas { context, size in
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let reach = hypot(size.width, size.height) / 2
+                let darkness = Self.vignetteOpacity * amount
+                context.fill(
+                    Path(CGRect(origin: .zero, size: size)),
+                    with: .radialGradient(
+                        Gradient(stops: [
+                            .init(color: .clear, location: 0.45),
+                            .init(color: .black.opacity(darkness * 0.35), location: 0.75),
+                            .init(color: .black.opacity(darkness), location: 1),
+                        ]),
+                        center: center, startRadius: 0, endRadius: reach
+                    )
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// One frame of grain tiled over the stage, from a tile and offset chosen
+    /// by `frame`, so consecutive frames don't visibly repeat.
+    private func grain(frame: Int) -> some View {
+        Canvas { context, size in
+            let tiles = FilmGrainTiles.images
+            guard !tiles.isEmpty else { return }
+            let pick = FilmGrainTiles.random(frame, 0)
+            let tile = tiles[Int(pick * Double(tiles.count)) % tiles.count]
+            let scale = FilmGrainTiles.pointsPerPixel(for: size)
+            let side = CGFloat(FilmGrainTiles.side) * scale
+            let origin = CGPoint(
+                x: -side * CGFloat(FilmGrainTiles.random(frame, 1)),
+                y: -side * CGFloat(FilmGrainTiles.random(frame, 2))
+            )
+            context.fill(
+                Path(CGRect(origin: .zero, size: size)),
+                with: .tiledImage(tile, origin: origin, scale: scale)
+            )
+        }
+    }
+}
+
+/// Seamless gray grain tiles centered on mid-gray, so overlay blending
+/// leaves the picture's average brightness alone. Each mixes per-pixel noise
+/// with softer clumps a few pixels wide, closer to film's irregular grain
+/// than flat digital noise. Gray only, so the grain is monochrome.
+enum FilmGrainTiles {
+    /// Tile edge in pixels.
+    static let side = 256
+    static let count = 8
+    /// Grain strength in gray levels (one standard deviation).
+    static let contrast = 38.0
+    /// Pixel size of the clumps.
+    private static let clumpSize = 3
+    /// Fine noise vs clumps; the clumps are what read as film.
+    private static let fineWeight = 0.55
+
+    static let images: [Image] = (0..<count).compactMap { index in
+        makeTile(seed: 0xF11A_6EA1 &+ UInt64(index)).map { Image(decorative: $0, scale: 1) }
+    }
+
+    /// Grain pixels are about one device pixel at 1080p and stay that share
+    /// of the frame on bigger outputs; never below half a point, so Retina
+    /// previews keep visible grain.
+    static func pointsPerPixel(for size: CGSize) -> CGFloat {
+        max(0.5, min(size.width, size.height) / 1080)
+    }
+
+    /// Gray levels around 128, `side` × `side`, row-major. Wraps at the edges
+    /// so the tile repeats without seams.
+    static func makeValues(seed: UInt64) -> [UInt8] {
+        let n = side
+        let m = n / clumpSize + (n % clumpSize == 0 ? 0 : 1)
+        var state = seed
+        func gaussian() -> Double {
+            // Irwin–Hall: four uniforms, rescaled to unit variance.
+            var sum = 0.0
+            for _ in 0..<4 { sum += nextUniform(&state) }
+            return (sum - 2) * 3.0.squareRoot()
+        }
+        let lattice = (0..<(m * m)).map { _ in gaussian() }
+        var raw = [Double](repeating: 0, count: n * n)
+        for y in 0..<n {
+            for x in 0..<n {
+                // Clumps: the coarse lattice, bilinearly interpolated with
+                // wraparound. Spanning the whole tile, so it tiles seamlessly.
+                let fx = Double(x) * Double(m) / Double(n)
+                let fy = Double(y) * Double(m) / Double(n)
+                let x0 = Int(fx), y0 = Int(fy)
+                let x1 = (x0 + 1) % m, y1 = (y0 + 1) % m
+                let tx = fx - Double(x0), ty = fy - Double(y0)
+                let top = lattice[y0 * m + x0] * (1 - tx) + lattice[y0 * m + x1] * tx
+                let bottom = lattice[y1 * m + x0] * (1 - tx) + lattice[y1 * m + x1] * tx
+                let clump = top * (1 - ty) + bottom * ty
+                raw[y * n + x] = fineWeight * gaussian() + (1 - fineWeight) * clump
+            }
+        }
+        // Normalize, since interpolation softens the clumps' spread.
+        let mean = raw.reduce(0, +) / Double(raw.count)
+        let variance = raw.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(raw.count)
+        let deviation = max(variance.squareRoot(), 1e-9)
+        return raw.map { value in
+            UInt8(min(255, max(0, (128 + (value - mean) / deviation * contrast).rounded())))
+        }
+    }
+
+    private static func makeTile(seed: UInt64) -> CGImage? {
+        let values = makeValues(seed: seed)
+        guard let provider = CGDataProvider(data: Data(values) as CFData) else { return nil }
+        return CGImage(
+            width: side, height: side,
+            bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: side,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        )
+    }
+
+    /// Deterministic 0..<1 noise for a frame and a channel (tile pick, x or
+    /// y shift), so every window draws the same grain.
+    static func random(_ frame: Int, _ channel: UInt64) -> Double {
+        var state = UInt64(bitPattern: Int64(frame)) &* 0x9E37_79B9_7F4A_7C15 &+ channel &* 0xD1B5_4A32_D192_ED03
+        return nextUniform(&state)
+    }
+
+    /// SplitMix64 step: advances `state`, returns 0..<1.
+    private static func nextUniform(_ state: inout UInt64) -> Double {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        z ^= z >> 31
+        return Double(z >> 11) / Double(1 << 53)
     }
 }
 

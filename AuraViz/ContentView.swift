@@ -691,6 +691,8 @@ struct ContentView: View {
 
             outputDimmerControl
 
+            filmGrainControl
+
             if isBeatModeSelected {
                 beatBackgroundControl
             }
@@ -821,6 +823,28 @@ struct ContentView: View {
                 .accessibilityLabel("Output brightness")
                 .accessibilityValue(String(format: "%.0f percent", performance.outputBrightness * 100))
             Text(String(format: "%.0f%%", performance.outputBrightness * 100))
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(width: 36, alignment: .trailing)
+            Spacer()
+        }
+    }
+
+    /// Strength of the monochrome film grain over every mode, preview and
+    /// output together.
+    private var filmGrainControl: some View {
+        HStack(spacing: 10) {
+            Label("Film Grain", systemImage: "film")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.85))
+            ControlSlider(value: $performance.filmGrain, in: PerformanceState.filmGrainRange,
+                          default: PerformanceState.defaultFilmGrain, format: Self.percent)
+                .tint(.gray)
+                .frame(maxWidth: 260)
+                .help("Monochrome film grain with a soft vignette over every mode, on the output and preview. 0% turns it off.")
+                .accessibilityLabel("Film grain")
+                .accessibilityValue(String(format: "%.0f percent", performance.filmGrain * 100))
+            Text(String(format: "%.0f%%", performance.filmGrain * 100))
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.6))
                 .frame(width: 36, alignment: .trailing)

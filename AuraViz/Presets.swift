@@ -24,6 +24,7 @@ enum SettingsKey {
     static let beatBackground = "beatBackground"
     static let beatBackgroundFit = "beatBackgroundFit"
     static let outputBrightness = "outputBrightness"
+    static let filmGrain = "filmGrain"
 }
 
 extension UserDefaults {
