@@ -12,8 +12,10 @@ import SwiftUI
 /// add a fine jitter. Sustained bass — a drop's long sub notes, which barely
 /// register as transients — also drives the look directly: while the smoothed
 /// bass level stays high the image holds a trembling push-in and keeps the
-/// color flooded, instead of sitting still between hits. At 0 beat reactivity
-/// the image holds still and only takes a faint volume-driven tint. Without
+/// color flooded, instead of sitting still between hits. Under all of that
+/// the slow `DriftCamera` keeps the picture breathing, zooming and wandering
+/// gently on its own. At 0 beat reactivity the image takes no hits, only
+/// that drift and a faint volume-driven tint. Without
 /// an image the stage shows a dark wash of the theme colors, so the shake and
 /// color still read.
 struct BeatVisualizerView: View {
@@ -53,13 +55,18 @@ struct BeatVisualizerView: View {
                 drums: drumReactivity.scaled(by: beatReactivity),
                 isActive: isActive
             )
+            let camera = DriftCamera.pose(at: now, isActive: isActive)
             GeometryReader { proxy in
                 let size = proxy.size
                 let short = max(1, min(size.width, size.height))
                 let aspect = max(size.width, size.height) / short
                 let color = colors.isEmpty ? Color.white : colors[look.colorIndex % colors.count]
                 ZStack {
+                    // The slow drift camera inside the shake: drifted, the
+                    // picture still covers the stage, so the shake's cover
+                    // zoom keeps hiding the edges on top of it.
                     picture(size: size, backdrop: backdrop)
+                        .driftCamera(camera)
                         .scaleEffect(look.coverScale(aspect: aspect))
                         .rotationEffect(.radians(look.rotation))
                         .offset(x: look.offset.width * short, y: look.offset.height * short)

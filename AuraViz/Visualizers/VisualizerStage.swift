@@ -73,8 +73,8 @@ struct VisualizerStage: View {
 
 /// Three soft theme-colored orbs behind the visualizer. They drift on slow
 /// Lissajous paths and swell with the bass (or the volume at zero beat
-/// reactivity), redrawing at most 30 times a second and freezing while audio
-/// is stopped.
+/// reactivity), seen through the slow `DriftCamera`, redrawing at most 30
+/// times a second and freezing while audio is stopped.
 ///
 /// Takes the manager unobserved and reads it per tick, so audio frames don't
 /// redraw the orbs faster than their own timeline.
@@ -110,8 +110,15 @@ struct StageOrbs: View {
             let now = BeatClock.time(for: timeline.date)
             let target = isActive ? 0.5 * audio.volume + CGFloat(audio.beatReactivity) * audio.bassEnvelope(at: now) : 0
             let state = Self.drift.advance(to: now, target: Double(min(1, max(0, target))), isActive: isActive)
+            let camera = DriftCamera.pose(at: now, isActive: isActive)
             let colors = theme.orbColors
             Canvas { context, size in
+                // The drift camera, applied inside the canvas so the zoom
+                // never draws past the stage.
+                var context = context
+                context.translateBy(x: size.width * (0.5 + camera.offset.width), y: size.height * (0.5 + camera.offset.height))
+                context.scaleBy(x: camera.scale, y: camera.scale)
+                context.translateBy(x: -size.width / 2, y: -size.height / 2)
                 draw(in: context, size: size, time: state.time, level: state.level, colors: colors)
             }
         }
@@ -169,6 +176,96 @@ private final class OrbDrift {
         let tau = target > level ? Self.attackTime : Self.releaseTime
         level += (target - level) * (1 - exp(-dt / tau))
         return (time, level)
+    }
+}
+
+/// Where the slow drift camera holds the stage background at one moment:
+/// a gentle zoom, and a shift that never exceeds the room the zoom makes, so
+/// a full-bleed picture's edges never show.
+struct DriftPose: Equatable {
+    var scale: CGFloat = 1
+    /// Shift as fractions of the stage's width and height.
+    var offset: CGSize = .zero
+}
+
+/// A slow, audio-independent camera over the stage background (the orbs, or
+/// Beat mode's picture) that makes it breathe: the zoom swells and settles
+/// and the frame wanders, each on two slow sines with incommensurate periods
+/// (about 20–70 s), so the motion never visibly loops or jerks.
+///
+/// The time only advances while audio runs, like the orbs, so the camera
+/// freezes in place when audio stops and resumes from there. Shared, so the
+/// preview and the output, and both layers of a transition, frame the
+/// background the same way.
+enum DriftCamera {
+    /// Zoom at the middle of the breath (5 % in).
+    static let baseZoom = 0.05
+    /// How far the zoom swings either side of that: 2.5 %–7.5 % in.
+    static let zoomSwing = 0.025
+    /// Share of the zoom's spare margin the frame may wander into, so a
+    /// picture's edge never reaches the stage edge.
+    static let reach = 0.85
+
+    // Periods (s): zoom 23 and 37, x 41 and 67, y 29 and 53. Two sines
+    // weighted 0.6 / 0.4, so each stays within ±1.
+    private static let zoomTerms = [(weight: 0.6, period: 23.0, phase: 0.0), (weight: 0.4, period: 37.0, phase: 1.9)]
+    private static let xTerms = [(weight: 0.6, period: 41.0, phase: 0.7), (weight: 0.4, period: 67.0, phase: 3.1)]
+    private static let yTerms = [(weight: 0.6, period: 53.0, phase: 2.3), (weight: 0.4, period: 29.0, phase: 4.4)]
+
+    private static let clock = DriftClock()
+
+    /// The pose for the shared drift time, advancing it to `now` while active.
+    static func pose(at now: TimeInterval, isActive: Bool) -> DriftPose {
+        pose(time: clock.advance(to: now, isActive: isActive))
+    }
+
+    /// The pose `t` seconds into the drift. The shift along each axis stays
+    /// within `reach` of the zoom's margin, `(scale − 1) / 2` of that axis,
+    /// so the scaled background still covers the stage.
+    static func pose(time t: Double) -> DriftPose {
+        guard t.isFinite else { return DriftPose(scale: CGFloat(1 + baseZoom)) }
+        let scale = 1 + baseZoom + zoomSwing * wave(zoomTerms, t)
+        let margin = reach * (scale - 1) / 2
+        return DriftPose(
+            scale: CGFloat(scale),
+            offset: CGSize(width: margin * wave(xTerms, t), height: margin * wave(yTerms, t))
+        )
+    }
+
+    private static func wave(_ terms: [(weight: Double, period: Double, phase: Double)], _ t: Double) -> Double {
+        terms.reduce(0) { $0 + $1.weight * sin(2 * .pi * t / $1.period + $1.phase) }
+    }
+}
+
+/// Drift time that only advances while audio runs. A class so it can advance
+/// inside a `TimelineView` update without invalidating SwiftUI state.
+private final class DriftClock {
+    private var time: Double = 0
+    private var lastTime: TimeInterval?
+
+    func advance(to now: TimeInterval, isActive: Bool) -> Double {
+        guard isActive, let lastTime else {
+            lastTime = now
+            return time
+        }
+        // Clamped so resuming after a pause or a hidden window continues
+        // instead of jumping; several layers advancing per frame see dt ≈ 0,
+        // and a caller a moment behind another doesn't rewind the clock.
+        let dt = min(0.1, max(0, now - lastTime))
+        time += dt
+        self.lastTime = max(lastTime, now)
+        return time
+    }
+}
+
+extension View {
+    /// Frames the view through the drift camera: zoomed about its center,
+    /// then shifted by the pose's fractions of its size.
+    func driftCamera(_ pose: DriftPose) -> some View {
+        scaleEffect(pose.scale)
+            .visualEffect { content, proxy in
+                content.offset(x: pose.offset.width * proxy.size.width, y: pose.offset.height * proxy.size.height)
+            }
     }
 }
 
